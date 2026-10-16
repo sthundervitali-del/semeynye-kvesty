@@ -224,6 +224,11 @@ function processFamily(fam) {
     if (g.kind !== "gift" || now - g.at > 3 * 3600e3 || !once("g_" + g.id)) return;
     kidMembers(g.kid).forEach(function (m) { push(m, fid, "🎁 Подарок от родителей: +" + g.pts, g.msg || "Открой приложение!"); });
   });
+  // 4а. Одобренные желания.
+  data.entries.forEach(function (e) {
+    if (e.type !== "wish" || e.status !== "ok" || !e.dec || now - (e.dec.decidedAt || 0) > 3 * 3600e3 || !once("w_" + e.id)) return;
+    kidMembers(e.kid).forEach(function (m) { push(m, fid, "🎉 Желание исполняется: " + e.title, e.dec.note || "Родители одобрили твою заявку. Открой приложение!"); });
+  });
 
   // Удаление старых фото-отчётов раз в сутки (срок — в настройках семьи, по умолчанию 14 дней).
   if (nowMin >= 3 * 60 && once("ph_clean")) {

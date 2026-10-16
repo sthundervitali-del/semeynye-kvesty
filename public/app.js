@@ -159,7 +159,7 @@ function recompute() {
       } else if (!isParent() && e.kid === kid && wasPending) {
         if (e.type === "task" && e.status === "ok") { toast(`✅ Проверка пройдена: +${e.value}. Баллы зачислятся вечером`, true); beep("good"); }
         else if (e.status === "redo") { toast("🔁 Проверка: нужна доработка", true); beep("alert"); }
-        else if (e.type === "wish" && e.status === "ok") { toast(`🎁 Награда одобрена: ${e.title}`, true); beep("good"); }
+        else if (e.type === "wish" && e.status === "ok") { setTimeout(maybeShowGift, 200); }
         else if (e.status === "no") toast(e.type === "wish" ? "Заявка на награду отклонена" : "Проверка: задание не засчитано", true);
       }
     }
@@ -337,6 +337,13 @@ function maybeShowGift() {
   if (document.querySelector(".scrim")) return;
   const kid = viewingKid(); if (!kid || isParent()) return;
   const seen = new Set(S.me?.seen || []);
+  const markSeen = id => { S.me.seen = [...(S.me.seen || []), id]; S.be.updateMember(S.user.uid, { seen: S.me.seen }).catch(fail); };
+  const w = S.data.entries.find(e => e.kid === kid && e.type === "wish" && e.status === "ok" && !seen.has(e.id));
+  if (w) {
+    modal(`<div class="gift-ic">🎉</div><h2>Желание исполняется!</h2><div class="amt" style="font-size:26px;line-height:1.25">${esc(w.title)}</div>${w.dec?.note ? `<div class="msg">${esc(w.dec.note)}</div>` : ""}<p class="hint">Родители одобрили твою заявку. Списано ${ptsW(w.value)}.</p><div class="btns" style="justify-content:center"><button class="btn go big" id="gift-ok">Ура! ❤️</button></div>`,
+      m => { confetti(); beep("good"); m.querySelector("#gift-ok").onclick = () => { closeModal(); markSeen(w.id); setTimeout(maybeShowGift, 300); }; }, "gift");
+    return;
+  }
   const g = S.data.gifts.find(x => x.kid === kid && x.kind === "gift" && !seen.has(x.id));
   if (!g) return;
   modal(`<div class="gift-ic">🎁</div><h2>Подарок от родителей!</h2><div class="amt num">+${ptsW(g.pts)}</div>${g.msg ? `<div class="msg">${esc(g.msg)}</div>` : ""}<p class="hint">Баллы уже на счету — их можно тратить.</p><div class="btns" style="justify-content:center"><button class="btn go big" id="gift-ok">Спасибо! ❤️</button></div>`,
@@ -569,6 +576,13 @@ function wishForm(id) {
     const del = m.querySelector("#wf-del"); if (del) del.onclick = () => ask(`Удалить «${w.title}»?`, "Удалить", () => S.be.setFamily({ wishes: { [id]: { ...w, del: true } } }).catch(fail), true);
   });
 }
+function wishApprove(e) {
+  const k = kidById(e.kid);
+  modal(`<h2>Выдать награду</h2><p class="hint">${esc(k?.name || "")} получит «${esc(e.title)}». Спишется ${ptsW(e.value)}. Ребёнок увидит праздничное сообщение.</p>
+    <label>Сообщение ребёнку (необязательно)<textarea id="wish-note" placeholder="Например: В субботу идём в кино!"></textarea></label>
+    <div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn ok" id="wish-ok">Выдать</button></div>`,
+  m => { m.querySelector("#wish-ok").onclick = () => { decide(e, "ok", m.querySelector("#wish-note").value.trim()); closeModal(); }; });
+}
 function redoForm(e) {
   const pre = e.dec?.ai && e.dec.ai.forAt === e.at && e.dec.ai.verdict !== "ok" ? e.dec.ai.comment : "";
   modal(`<h2>На доработку</h2><p class="hint">«${esc(e.title)}». Ребёнок увидит текст как замечание проверки.</p>
@@ -667,7 +681,7 @@ document.addEventListener("click", e => {
       S.be.putEntry(kid, F.monthKey(), { id: uid(), kid, type: "wish", ref: w.id, title: w.title, pts: w.cost, day: today(), at: Date.now() }).then(() => toast("Заявка отправлена 🎁")).catch(fail);
     }); return;
   }
-  if (act === "approve" || act === "reject") { const en = S.data.entries.find(x => x.id === id); if (en) decide(en, act === "approve" ? "ok" : "no"); return; }
+  if (act === "approve" || act === "reject") { const en = S.data.entries.find(x => x.id === id); if (!en) return; if (act === "approve" && en.type === "wish") return wishApprove(en); decide(en, act === "approve" ? "ok" : "no"); return; }
   if (act === "redo") { const en = S.data.entries.find(x => x.id === id); if (en) redoForm(en); return; }
   if (act === "undo") { const en = S.data.entries.find(x => x.id === id); if (en) S.be.putDecision(en.doc, en.id, { status: "", note: "", decidedAt: Date.now(), ai: en.dec?.ai || null }).then(() => toast("Решение отменено — заявка снова на проверке")).catch(fail); return; }
   if (act === "zoom") { const l = document.createElement("div"); l.className = "light"; l.innerHTML = `<img src="${S.photos[id]}" alt="Фото-отчёт">`; l.onclick = () => l.remove(); document.body.appendChild(l); return; }
