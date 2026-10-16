@@ -1,0 +1,771 @@
+/* Семейные квесты — интерфейс. */
+import { firebaseBackend, demoBackend, uid } from "/backend.js";
+const F = window.FQ;
+
+/* ---------- утилиты ---------- */
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const plural = (n, a, b, c) => { n = Math.abs(n) % 100; const m = n % 10; if (n > 10 && n < 20) return c; if (m > 1 && m < 5) return b; if (m === 1) return a; return c; };
+const ptsW = n => n + " " + plural(n, "балл", "балла", "баллов");
+const minW = n => n + " " + plural(n, "минута", "минуты", "минут");
+const today = () => F.dayKey();
+const fmtTime = ts => { const d = new Date(ts); return F.pad(d.getHours()) + ":" + F.pad(d.getMinutes()); };
+const fmtDate = ts => { const d = new Date(ts); return F.pad(d.getDate()) + "." + F.pad(d.getMonth() + 1) + " " + fmtTime(ts); };
+const MONTHS = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+const MONTHS_G = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
+const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
+const CATS = { home: { n: "Дом", ic: "🧹" }, study: { n: "Учёба", ic: "📚" }, other: { n: "Полезное", ic: "⭐" } };
+const FREQ = { day: "раз в день", week: "N раз в неделю", many: "сколько угодно", once: "один раз" };
+const COLORS = { violet: "var(--study)", teal: "var(--home)", rose: "var(--other)", gold: "var(--gold)" };
+const RANKS = ["Новичок", "Помощник", "Умелец", "Мастер дома", "Герой семьи", "Легенда", "Великий магистр"];
+const coin = (s = 18) => `<svg class="coin" width="${s}" height="${s}" aria-hidden="true"><use href="#coin"/></svg>`;
+const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) {} };
+
+/* ---------- состояние ---------- */
+const S = {
+  be: null, user: null, families: [], fid: null, cfg: null, members: [], kidlogs: [], plogs: [],
+  data: { entries: [], gifts: [] }, me: null, loaded: false, tab: null, preview: null,
+  calMonth: F.monthKey(), calKid: null, selDay: null, photos: {}, error: null, prevStatus: null,
+};
+const isParent = () => S.me?.role === "parent";
+const kidsList = () => S.cfg?.kids || [];
+const kidById = id => kidsList().find(k => k.id === id);
+const viewingKid = () => isParent() ? S.preview : S.me?.kidId;
+const kidColor = k => COLORS[k?.color] || COLORS.violet;
+
+/* ---------- стартовый набор дел ---------- */
+function starterSet(kids) {
+  let o = 0;
+  const T = (title, cat, pts, extra) => { const id = uid("t"); return [id, { id, o: o++, title, cat, pts, who: "all", mandatory: false, bound: false, schedule: { mode: "workdays", days: [] }, time: "", deadline: "none", grace: 30, latePct: 50, repeat: 0, freq: "many", times: 1, checklist: [], photo: false, active: true, del: false, ...extra }]; };
+  const W = (title, cost) => { const id = uid("w"); return [id, { id, o: o++, title, cost, who: "all", del: false }]; };
+  const t = [
+    T("Выйти в школу", "study", 5, { mandatory: true, bound: true, schedule: { mode: "workdays", days: [] }, time: "07:40", deadline: "strict", grace: 15, repeat: 5 }),
+    T("Застелить кровать", "home", 5, { mandatory: true, bound: true, schedule: { mode: "days", days: [1, 2, 3, 4, 5, 6, 7] } }),
+    T("Сделать уроки", "study", 20, { mandatory: true, bound: true, schedule: { mode: "workdays", days: [] }, time: "18:00", deadline: "late", grace: 60, latePct: 50, repeat: 30, checklist: ["Все письменные задания сделаны", "Устные выучены", "Рюкзак собран на завтра"], photo: true }),
+    T("Порядок в комнате", "home", 10, { mandatory: true, bound: true, schedule: { mode: "days", days: [1, 2, 3, 4, 5, 6, 7] }, time: "20:30", deadline: "late", grace: 30, latePct: 50, checklist: ["Стол разобран", "Одежда в шкафу или в корзине", "На полу ничего не валяется"], photo: true }),
+    ...kids.map(k => T("Лечь спать", "other", 5, { who: k.id, mandatory: true, bound: true, schedule: { mode: "days", days: [1, 2, 3, 4, 5, 6, 7] }, time: (k.age || 12) <= 11 ? "21:30" : (k.age || 12) <= 13 ? "22:30" : "23:00", deadline: "strict", grace: 15, repeat: 10 })),
+    T("Почитать книгу 20 минут", "study", 10, { bound: true, schedule: { mode: "days", days: [1, 2, 3, 4, 5, 6, 7] } }),
+    T("Помочь с обедом или ужином", "home", 15, { bound: true, schedule: { mode: "offdays", days: [] } }),
+    T("Генеральная уборка комнаты", "home", 30, { mandatory: true, freq: "week", times: 1, checklist: ["Вытерта пыль", "Пропылесосено", "Порядок в шкафу", "Мусор вынесен"], photo: true }),
+    T("Пропылесосить квартиру", "home", 25, { mandatory: true, freq: "week", times: 1, photo: true }),
+    T("Помыть посуду за всеми", "home", 15, { freq: "many" }),
+    T("Получить хорошую оценку", "study", 15, { freq: "many", photo: true }),
+    T("Час подготовки к контрольной", "study", 25, { freq: "many" }),
+    T("Помочь родителям без просьбы", "other", 15, { freq: "many" }),
+  ];
+  const w = [W("+30 минут игр на компьютере", 40), W("Выбрать фильм на семейный вечер", 50), W("Лечь спать на час позже в пятницу", 60), W("Любимая еда на ужин", 120), W("Набор для творчества или книга на выбор", 200), W("Кино с друзьями", 250), W("Покупка в игре (по договорённости)", 300), W("Большое желание из списка", 600)];
+  return { tasks: Object.fromEntries(t), wishes: Object.fromEntries(w), days: {}, settings: { creditTime: "21:00", belarus: true, autoAI: false, tz: "Europe/Minsk", photoDays: 14 } };
+}
+
+/* ---------- демо-данные ---------- */
+function demoSeed(store, user) {
+  const kids = [{ id: "k1", name: "Дочка", age: 10, color: "violet" },
+                { id: "k2", name: "Сын", age: 14, color: "teal" }];
+  const set = starterSet(kids);
+  store.family = { name: "Семья (демо)", createdBy: user.uid, kids, ...set };
+  store.members = { [user.uid]: { role: "parent", name: user.displayName, email: user.email, tokens: [], seen: [] },
+                    "demo-p2": { role: "parent", name: "Папа", email: "papa@example.com", tokens: [], seen: [] },
+                    "demo-k1": { role: "child", kidId: "k1", name: "Дочка", email: "doch@example.com", tokens: [], seen: [] },
+                    "demo-k2": { role: "child", kidId: "k2", name: "Сын", email: "syn@example.com", tokens: [], seen: [] } };
+  const tasks = Object.values(set.tasks);
+  const now = Date.now(), t0 = today();
+  const put = (kid, e, dec) => {
+    const doc = kid + "_" + e.day.slice(0, 7);
+    store.kidlog[doc] = store.kidlog[doc] || { kid, e: {} }; store.kidlog[doc].e[e.id] = e;
+    if (dec) { store.plog[doc] = store.plog[doc] || { d: {}, g: {} }; store.plog[doc].d = store.plog[doc].d || {}; store.plog[doc].d[e.id] = dec; }
+  };
+  for (let i = 16; i >= 1; i--) {
+    const s = F.addDays(t0, -i);
+    for (const k of kids) {
+      tasks.filter(t => F.forKid(t, k.id) && F.applies(t, s, store.family)).forEach((t, j) => {
+        if ((i * 7 + j * 3 + (k.id === "k2" ? 5 : 0)) % 6 === 0) return;           // иногда пропускает
+        const at = F.atTime(s, "17:00") + j * 6e5, id = uid();
+        put(k.id, { id, kid: k.id, type: "task", ref: t.id, title: t.title, pts: t.pts, day: s, at, checks: t.checklist, photos: [] }, { status: (i + j) % 11 === 0 ? "no" : "ok", decidedAt: at + 36e5, note: "" });
+      });
+    }
+  }
+  // сегодня: заявка с фото на проверке
+  const room = tasks.find(t => t.title === "Порядок в комнате");
+  const pid = "pdemo1";
+  const c = document.createElement("canvas"); c.width = 480; c.height = 360; const g = c.getContext("2d");
+  g.fillStyle = "#d9c7a8"; g.fillRect(0, 0, 480, 360); g.fillStyle = "#8a6a45"; g.fillRect(40, 200, 400, 30); g.fillStyle = "#5d7fbf"; g.fillRect(70, 120, 140, 80); g.fillStyle = "#f2efe8"; g.fillRect(260, 150, 120, 50);
+  g.fillStyle = "#333"; g.font = "20px sans-serif"; g.fillText("фото комнаты (демо)", 140, 320);
+  store.photos[pid] = { data: c.toDataURL("image/jpeg", .7), kid: "k1", at: now };
+  put("k1", { id: "edemo1", kid: "k1", type: "task", ref: room.id, title: room.title, pts: room.pts, day: t0, at: now - 9e5, checks: room.checklist, photos: [pid] },
+      { status: "", ai: { verdict: "ok", comment: "Стол разобран, на полу чисто. Молодец!", forAt: now - 9e5 } });
+  const wish = Object.values(set.wishes)[1];
+  put("k2", { id: "edemo2", kid: "k2", type: "wish", ref: wish.id, title: wish.title, pts: wish.cost, day: t0, at: now - 3e5 }, null);
+  const doc = "k1_" + F.monthKey();
+  store.plog[doc] = store.plog[doc] || { d: {}, g: {} };
+  store.plog[doc].g = { gdemo: { id: "gdemo", kid: "k1", kind: "gift", pts: 30, msg: "Ты сегодня так здорово помогла с уборкой! Мы тобой гордимся ❤️", at: now - 6e4, day: t0 } };
+  store.family.days[F.addDays(t0, 1)] = { x2: [tasks.find(t => t.title === "Сделать уроки").id] };
+}
+
+/* ---------- модалки, тосты, звук ---------- */
+function modal(inner, onMount, cls = "") {
+  const layer = document.getElementById("layer");
+  layer.innerHTML = `<div class="scrim" data-act="closeModal"><div class="modal ${cls}" role="dialog" aria-modal="true">${inner}</div></div>`;
+  onMount && onMount(layer.querySelector(".modal"));
+}
+function closeModal() { document.getElementById("layer").innerHTML = ""; }
+let tTimer;
+function toast(msg, alert) {
+  document.querySelector(".toast")?.remove();
+  const t = document.createElement("div"); t.className = "toast" + (alert ? " alert" : ""); t.setAttribute("role", "status"); t.textContent = msg;
+  document.body.appendChild(t); clearTimeout(tTimer); tTimer = setTimeout(() => t.remove(), alert ? 5000 : 2600);
+}
+function ask(text, yes, onYes, danger) {
+  modal(`<h2>${esc(text)}</h2><div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn ${danger ? "no" : "dark"}" id="ask-yes">${esc(yes)}</button></div>`,
+    m => m.querySelector("#ask-yes").onclick = () => { closeModal(); onYes(); });
+}
+let actx = null;
+function beep(kind) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume();
+    (kind === "good" ? [660, 880, 1175] : [880, 660]).forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = f; const t0 = actx.currentTime + i * .13;
+      g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.25, t0 + .02); g.gain.exponentialRampToValueAtTime(.0001, t0 + .12);
+      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + .14);
+    });
+  } catch (_) {}
+  try { navigator.vibrate && navigator.vibrate(kind === "good" ? [60, 40, 60] : [120, 60, 120]); } catch (_) {}
+}
+function confetti() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const c = document.createElement("div"); c.className = "confetti";
+  const cols = ["#F2B53A", "#6247D3", "#178174", "#B9456F", "#25804A"];
+  for (let i = 0; i < 60; i++) { const p = document.createElement("i"); p.style.left = Math.random() * 100 + "%"; p.style.background = cols[i % cols.length]; p.style.animationDuration = (1.8 + Math.random() * 1.6) + "s"; p.style.animationDelay = Math.random() * .6 + "s"; c.appendChild(p); }
+  document.body.appendChild(c); setTimeout(() => c.remove(), 4200);
+}
+const fail = e => { console.error(e); toast(e?.code === "permission-denied" ? "Нет прав на это действие." : "Не получилось сохранить. Проверьте интернет и попробуйте ещё раз."); };
+
+/* ---------- данные ---------- */
+function recompute() {
+  if (!S.cfg) return;
+  S.data = F.merge(S.kidlogs, S.plogs, S.cfg);
+  // уведомления внутри приложения о новых событиях
+  const now = new Map(S.data.entries.map(e => [e.id, e.status + "|" + e.at]));
+  if (S.prevStatus) {
+    const kid = viewingKid();
+    for (const e of S.data.entries) {
+      const before = S.prevStatus.get(e.id), cur = now.get(e.id);
+      if (before === cur) continue;
+      const wasPending = before && before.startsWith("pending");
+      if (isParent() && !S.preview && e.status === "pending" && e.type !== "game") {
+        const k = kidById(e.kid)?.name || "";
+        toast(e.type === "wish" ? `🔔 ${k} хочет обменять: ${e.title}` : `🔔 На проверку: ${k} — ${e.title}`, true); beep("alert");
+      } else if (!isParent() && e.kid === kid && wasPending) {
+        if (e.type === "task" && e.status === "ok") { toast(`✅ Проверка пройдена: +${e.value}. Баллы зачислятся вечером`, true); beep("good"); }
+        else if (e.status === "redo") { toast("🔁 Проверка: нужна доработка", true); beep("alert"); }
+        else if (e.type === "wish" && e.status === "ok") { toast(`🎁 Награда одобрена: ${e.title}`, true); beep("good"); }
+        else if (e.status === "no") toast(e.type === "wish" ? "Заявка на награду отклонена" : "Проверка: задание не засчитано", true);
+      }
+    }
+  }
+  S.prevStatus = now;
+}
+const acct = kid => F.account(kid, S.data, S.cfg);
+const photoDays = () => +(S.cfg?.settings?.photoDays) || 14;
+const pendingList = () => S.data.entries.filter(e => e.status === "pending" && e.type !== "game");
+function level(kid) { const e = acct(kid).earnedTotal; const lv = Math.floor(e / 150) + 1; return { lv, rank: RANKS[Math.min(lv - 1, RANKS.length - 1)], cur: e % 150, e }; }
+function streak(kid) {
+  const days = new Set(S.data.entries.filter(e => e.kid === kid && e.type === "task" && e.status === "ok").map(e => e.day));
+  let s = today(); if (!days.has(s)) s = F.addDays(s, -1); let n = 0; while (days.has(s)) { n++; s = F.addDays(s, -1); } return n;
+}
+const sundayLabel = () => `в воскресенье в ${F.creditTime(S.cfg)}`;
+
+/* ====================== РЕНДЕР ====================== */
+let renderPending = false;
+function render() {
+  renderPending = false;
+  const app = document.getElementById("app");
+  if (S.error) { app.innerHTML = errorScreen(); return; }
+  if (!S.be || S.user === undefined) { app.innerHTML = `<div class="boot">Загрузка…</div>`; return; }
+  if (!S.user) { app.innerHTML = loginScreen(); return; }
+  if (!S.fid) { app.innerHTML = onboardingScreen(); return; }
+  if (!S.loaded || !S.cfg) { app.innerHTML = `<div class="boot">Загружаю семью…</div>`; return; }
+  if (!S.me) { app.innerHTML = noAccessScreen(); return; }
+  const kidMode = !!viewingKid();
+  const tabs = kidMode
+    ? [["today", "✅", "Сегодня"], ["cal", "📅", "Календарь"], ["shop", "🎁", "Награды"], ["hist", "🧾", "История"]]
+    : [["review", "🔍", "Проверка"], ["cal", "📅", "Календарь"], ["tasks", "📋", "Дела"], ["rewards", "🎁", "Награды"], ["family", "👨‍👩‍👧‍👦", "Семья"]];
+  if (!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
+  const pend = pendingList().length;
+  let html = `<nav class="nav" aria-label="Разделы"><div class="nav-in">${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="i">${i}</span>${n}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}</button>`).join("")}</div></nav><div class="wrap">`;
+  html += topBar();
+  if (kidMode) {
+    const k = kidById(viewingKid());
+    if (!k) html += `<div class="empty">Профиль ребёнка не найден. Попросите родителей прислать новый код приглашения.</div>`;
+    else html += ({ today: kidToday, cal: calendarView, shop: kidShop, hist: kidHistory })[S.tab](k);
+  } else html += ({ review: parentReview, cal: calendarView, tasks: parentTasks, rewards: parentRewards, family: parentFamily })[S.tab]();
+  html += `</div>`;
+  app.innerHTML = html;
+  if (kidMode) maybeShowGift();
+}
+function rerender() {
+  const a = document.activeElement;
+  if (a && a.closest && a.closest("#app") && a.matches("input,textarea,select")) { renderPending = true; return; }
+  render();
+}
+document.addEventListener("focusout", () => setTimeout(() => { if (renderPending) rerender(); }, 150));
+
+function topBar() {
+  const kid = viewingKid() && kidById(viewingKid());
+  const who = kid ? kid.name : (S.me?.name || S.user.displayName || "Родитель");
+  return `${S.be.demo ? `<div class="banner"><span>Демо-режим: данные не сохраняются</span><span class="btnrow">${["parent", "k1", "k2"].map(r => `<button class="btn sm ${demoRole() === r ? "dark" : ""}" data-act="demoRole" data-id="${r}">${r === "parent" ? "Родитель" : esc(kidById(r)?.name || r)}</button>`).join("")}</span></div>` : ""}
+  ${isParent() && S.preview ? `<div class="banner"><span>Вы смотрите глазами ребёнка: ${esc(kid?.name || "")}</span><button class="btn sm dark" data-act="endPreview">Вернуться</button></div>` : ""}
+  <header class="top"><div class="brand">${coin(32)}<div><h1>Семейные квесты</h1><small>${esc(S.cfg?.name || "")}</small></div></div>
+  <button class="avatar" style="background:${kid ? kidColor(kid) : "var(--muted)"}" data-act="${viewingKid() && !isParent() ? "kidMenu" : "tab"}" data-id="family" aria-label="${esc(who)}">${esc((who || "?")[0].toUpperCase())}</button></header>`;
+}
+function demoRole() { return S.me?.role === "parent" ? "parent" : S.me?.kidId; }
+
+/* ---------- экраны входа ---------- */
+const GLOGO = `<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
+function loginScreen() {
+  const join = new URLSearchParams(location.search).get("join");
+  return `<div class="login"><div class="box">${coin(64)}<h1>Семейные квесты</h1>
+    <p class="hint" style="font-size:15px">Дела по дому и учёба за баллы. Баллы копятся за неделю и обмениваются на награды.</p>
+    ${join ? `<div class="banner">Вас пригласили в семью. Войдите, чтобы присоединиться.</div>` : ""}
+    <button class="gbtn" data-act="signIn">${GLOGO} Войти через Google</button>
+    <div class="feat"><div>✅ Обязательные и дополнительные дела</div><div>⏰ Напоминания на телефон</div><div>📅 Календарь с праздниками РБ</div><div>🎁 Награды и подарки</div></div>
+    <p class="hint">Каждая семья видит только свои данные.</p></div></div>`;
+}
+function onboardingScreen() {
+  const join = new URLSearchParams(location.search).get("join") || "";
+  return `<div class="wrap" style="padding-bottom:40px"><header class="top"><div class="brand">${coin(32)}<div><h1>Добро пожаловать</h1><small>${esc(S.user.email || "")}</small></div></div><button class="btn sm ghost" data-act="signOut">Выйти</button></header>
+    <section class="card"><h2>У меня есть код приглашения</h2><p class="hint">Код присылает родитель из раздела «Семья». Подходит детям и второму родителю.</p>
+      <form class="grid" data-form="join"><label>Код<input id="j-code" name="code" value="${esc(join)}" autocomplete="off" autocapitalize="characters" required placeholder="Например: K7M2QX9A"></label><div><button class="btn go big">Присоединиться</button></div></form></section>
+    <section class="card"><h2>Создать новую семью</h2><p class="hint">Вы станете родителем-администратором. Второго родителя и детей пригласите кодом.</p>
+      <form class="grid" data-form="create">
+        <label class="full">Название семьи<input id="c-name" name="name" required placeholder="Например: Семья Ивановых"></label>
+        <label>Ребёнок 1<input id="c-k1" name="k1" required placeholder="Имя"></label><label>Возраст<input id="c-a1" name="a1" type="number" inputmode="numeric" min="3" max="18" value="10"></label>
+        <label>Ребёнок 2<input id="c-k2" name="k2" placeholder="Имя (необязательно)"></label><label>Возраст<input id="c-a2" name="a2" type="number" inputmode="numeric" min="3" max="18" value="14"></label>
+        <label>Ребёнок 3<input id="c-k3" name="k3" placeholder="Имя (необязательно)"></label><label>Возраст<input id="c-a3" name="a3" type="number" inputmode="numeric" min="3" max="18"></label>
+        <div class="full"><button class="btn dark big">Создать семью</button></div></form></section></div>`;
+}
+const noAccessScreen = () => `<div class="login"><div class="box"><h1>Нет доступа</h1><p class="hint">Вас удалили из этой семьи или доступ ещё не выдан.</p><button class="btn dark" data-act="leaveFamily">Выбрать другую семью</button><button class="btn ghost" data-act="signOut">Выйти</button></div></div>`;
+const errorScreen = () => `<div class="login"><div class="box"><h1>Приложение не настроено</h1><p class="hint">${esc(S.error)}</p><a class="btn dark" href="?demo">Открыть демо-режим</a></div></div>`;
+
+/* ====================== РЕБЁНОК ====================== */
+function hero(k) {
+  const a = acct(k.id), L = level(k.id), st = streak(k.id);
+  return `<section class="hero">
+    <div><div class="who">${esc(k.name)} · уровень ${L.lv}</div><div class="rank">${L.rank}</div></div>
+    <div class="bal"><div class="v num">${a.available}</div><div class="l">можно потратить</div></div>
+    <div class="xp"><div class="bar"><i style="width:${Math.round(L.cur / 1.5)}%"></i></div><div class="row num"><span>До уровня ${L.lv + 1}: ещё ${150 - L.cur}</span><span>🔥 ${st} ${plural(st, "день", "дня", "дней")} подряд</span></div></div>
+    <div class="stats num">
+      <span class="stat"><b>+${a.today}</b>сегодня${a.tonight ? `, зачислится в ${F.creditTime(S.cfg)}` : ""}</span>
+      <span class="stat"><b>${a.locked}</b>копится за неделю, откроется ${sundayLabel()}</span>
+      ${a.reserved ? `<span class="stat"><b>${a.reserved}</b>в заявках на награды</span>` : ""}
+    </div></section>`;
+}
+function taskRow(t, k, s, st) {
+  const x = F.mult(S.cfg, s, t.id);
+  const dl = s === today() ? F.deadline(t, s, S.cfg) : null;
+  const latePts = dl && dl.phase === "late" ? Math.round(t.pts * x * dl.pct / 100) : null;
+  let side;
+  if (st.free && dl && dl.phase === "closed") side = `<span class="pill no">Время вышло</span>`;
+  else if (st.free && latePts != null) side = `<span class="pts num">+${latePts}</span><button class="btn" data-act="done" data-id="${t.id}">Сделал с опозданием</button>`;
+  else if (st.free) side = `<span class="pts num">+${t.pts * x}</span>${st.pending ? `<span class="pill wait">проверяется: ${st.pending}</span>` : ""}<button class="btn go" data-act="done" data-id="${t.id}">Готово!</button>`;
+  else if (st.status === "pending") side = `<span class="pts num">+${t.pts * x}</span><span class="pill wait">Проверяется…</span>`;
+  else if (st.status === "redo") side = `<span class="pts num">+${t.pts * x}</span><button class="btn go" data-act="done" data-id="${t.id}" data-entry="${st.entry.id}">Исправил!</button>`;
+  else side = `<span class="pill ok">✓ Принято</span>`;
+  const sub = [];
+  if (t.bound && t.time) sub.push(`<span class="time">⏰ ${esc(t.time)}</span>`);
+  if (dl && st.free) sub.push(dl.phase === "open" ? (dl.left < 3600e3 ? `<b style="color:var(--warn)">осталось ${Math.max(1, Math.ceil(dl.left / 60000))} мин</b>` : `сдать до ${fmtTime(dl.deadline)}`) : dl.phase === "late" ? `<b style="color:var(--warn)">опоздание: ${dl.pct}% баллов</b>` : "");
+  sub.push(CATS[t.cat]?.n || "");
+  if (!t.bound && t.freq === "week" && st.need) sub.push(`${st.count || 0} из ${st.need} на неделе`);
+  if (!t.bound && t.freq === "many") sub.push("сколько угодно раз");
+  const tags = [t.checklist?.length ? `☑ ${t.checklist.length}` : "", t.photo ? "📷 фото" : ""].filter(Boolean).map(v => `<span class="tag">${v}</span>`).join("");
+  const done = (!st.free && st.status !== "redo") || (st.free && dl && dl.phase === "closed");
+  return `<div class="task ${t.mandatory && !done ? "must" : ""} ${done ? "done" : ""}"><span class="ic cat-${t.cat}">${CATS[t.cat]?.ic || "⭐"}</span>
+    <div class="t"><b>${esc(t.title)}${x > 1 ? `<span class="x2">×2</span>` : ""}</b><small>${sub.filter(Boolean).join(" · ")}</small>${tags}</div><div class="side">${side}</div>
+    ${st.status === "redo" ? `<div class="note"><b>Нужна доработка.</b> ${esc(st.entry.dec?.note || "Проверка не прошла. Посмотри ещё раз и пришли новое фото.")}</div>` : ""}</div>`;
+}
+function kidToday(k) {
+  const s = today(), info = F.dayInfo(s, S.cfg);
+  const tasks = F.live(S.cfg.tasks).filter(t => t.active !== false && F.forKid(t, k.id));
+  const groups = { mb: [], ob: [], mu: [], ou: [] };
+  tasks.forEach(t => { if (t.bound && !F.applies(t, s, S.cfg)) return; groups[F.category(t)].push(t); });
+  groups.mb.sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+  groups.ob.sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+  let out = hero(k);
+  if (info.type === "off" && info.reason !== "weekend") out += `<span class="daychip">🎉 Сегодня выходной${info.name ? ": " + esc(info.name) : ""}</span>`;
+  else if (info.reason === "transfer" || info.reason === "parent") out += `<span class="daychip">📌 ${esc(info.name)}</span>`;
+  const titles = { mb: ["Обязательно сегодня", "Сделай всё до вечера"], ob: ["Можно сегодня", "За это дополнительные баллы"], mu: ["Обязательно на этой неделе", "Успей до воскресенья"], ou: ["В любое время", "Дополнительные баллы"] };
+  let any = false;
+  for (const c of ["mb", "mu", "ob", "ou"]) {
+    const list = groups[c]; if (!list.length) continue; any = true;
+    const active = st => (st.free && !st.closed) || st.status === "redo";
+    const rows = list.map(t => { const st = F.taskState(t, k.id, s, S.data); const dl = F.deadline(t, s, S.cfg); if (st.free && dl && dl.phase === "closed") st.closed = true; return [t, st]; });
+    rows.sort((a, b) => active(b[1]) - active(a[1]));
+    const left = rows.filter(r => active(r[1])).length;
+    out += `<section class="card"><div class="group-h"><h2>${titles[c][0]}</h2><span class="hint">${c[0] === "m" ? (left ? `осталось ${left}` : "всё сделано 🎉") : titles[c][1]}</span></div><div class="group">${rows.map(([t, st]) => taskRow(t, k, s, st)).join("")}</div></section>`;
+  }
+  if (!any) out += `<div class="empty">На сегодня дел нет. Отдыхай!</div>`;
+  return out;
+}
+function kidShop(k) {
+  const a = acct(k.id);
+  let out = `<section class="card"><div class="card-head"><h2>Мои баллы</h2></div><div class="kids-sum"><div class="ks"><span>Можно потратить</span><span class="v num">${a.available}</span></div><div class="ks"><span>Копится за неделю</span><span class="v num">${a.locked}</span><small class="hint">откроется ${sundayLabel()}</small></div></div></section>`;
+  const wishes = F.live(S.cfg.wishes).filter(w => F.forKid(w, k.id)).sort((x, y) => x.cost - y.cost);
+  out += `<section class="card"><div class="card-head"><h2>Магазин желаний</h2><span class="hint">Обменяй баллы на награду</span></div>`;
+  out += wishes.length ? `<div class="shop">${wishes.map(w => { const can = a.available >= w.cost, p = Math.max(0, Math.min(100, Math.round(a.available / w.cost * 100)));
+    return `<div class="wish"><b>${esc(w.title)}</b><div class="cost num">${coin(16)} ${w.cost}</div>${can ? "" : `<div class="mini"><i style="width:${p}%"></i></div><div class="need num">Ещё ${ptsW(w.cost - a.available)}</div>`}
+      <button class="btn ${can ? "dark" : ""}" data-act="wish" data-id="${w.id}" ${can ? "" : "disabled"}>${can ? "Обменять" : "Копим"}</button></div>`; }).join("")}</div>` : `<div class="empty">Желаний пока нет.</div>`;
+  return out + `</section>`;
+}
+function histRow(e) {
+  if (e.kind) { // подарок / бонус
+    const plus = e.pts >= 0;
+    return `<div class="it"><span>${e.kind === "gift" ? "🎁 Подарок от родителей" : plus ? "🏅 Бонус" : "⚠️ Списание"}${e.msg ? `<br><small>${esc(e.msg)}</small>` : ""}<br><small>${fmtDate(e.at)}</small></span><span class="pill ok">${plus ? "получено" : "списано"}</span><span class="delta num ${plus ? "plus" : "minus"}">${plus ? "+" : "−"}${Math.abs(e.pts)}</span></div>`;
+  }
+  const minus = e.type !== "task";
+  const sign = (minus ? "−" : "+") + e.value;
+  const label = e.type === "game" ? `🎮 Игровое время +${e.minutes} мин` : e.type === "wish" ? "🎁 " + esc(e.title) : esc(e.title);
+  const pill = e.status === "pending" ? `<span class="pill wait">${e.type === "wish" ? "ждёт" : "проверяется"}</span>` : e.status === "redo" ? `<span class="pill wait">доработка</span>` : e.status === "ok" ? `<span class="pill ok">${e.type === "task" ? "принято" : e.type === "wish" ? "одобрено" : "куплено"}</span>` : `<span class="pill no">${e.type === "wish" ? "отклонено" : "не засчитано"}</span>`;
+  const note = e.dec?.note && e.status !== "pending" ? `<br><small>Проверка: ${esc(e.dec.note)}</small>` : "";
+  return `<div class="it"><span>${label}<br><small>${fmtDate(e.at)}</small>${note}</span>${pill}<span class="delta num ${e.status === "no" || e.status === "redo" || e.status === "pending" ? "" : minus ? "minus" : "plus"}">${sign}</span></div>`;
+}
+function kidHistory(k) {
+  const items = [...S.data.entries.filter(e => e.kid === k.id), ...S.data.gifts.filter(g => g.kid === k.id)].sort((a, b) => b.at - a.at).slice(0, 60);
+  return `<section class="card"><h2>История</h2>${items.length ? `<div class="list">${items.map(histRow).join("")}</div>` : `<div class="empty">Тут появятся выполненные дела и награды.</div>`}</section>`;
+}
+function maybeShowGift() {
+  if (document.querySelector(".scrim")) return;
+  const kid = viewingKid(); if (!kid || isParent()) return;
+  const seen = new Set(S.me?.seen || []);
+  const g = S.data.gifts.find(x => x.kid === kid && x.kind === "gift" && !seen.has(x.id));
+  if (!g) return;
+  modal(`<div class="gift-ic">🎁</div><h2>Подарок от родителей!</h2><div class="amt num">+${ptsW(g.pts)}</div>${g.msg ? `<div class="msg">${esc(g.msg)}</div>` : ""}<p class="hint">Баллы уже на счету — их можно тратить.</p><div class="btns" style="justify-content:center"><button class="btn go big" id="gift-ok">Спасибо! ❤️</button></div>`,
+    m => { confetti(); beep("good"); m.querySelector("#gift-ok").onclick = () => { closeModal(); S.me.seen = [...(S.me.seen || []), g.id]; S.be.updateMember(S.user.uid, { seen: S.me.seen }).catch(fail); setTimeout(maybeShowGift, 300); }; }, "gift");
+}
+
+/* ====================== КАЛЕНДАРЬ ====================== */
+function calendarView(kParam) {
+  const parentMode = !viewingKid();
+  const kids = kidsList();
+  if (!S.calKid || !kidById(S.calKid)) S.calKid = viewingKid() || kids[0]?.id;
+  const kid = viewingKid() || S.calKid;
+  const [y, m] = S.calMonth.split("-").map(Number);
+  const first = F.dayKey(new Date(y, m - 1, 1)), start = F.weekStart(first);
+  const t0 = today();
+  if (!S.selDay) S.selDay = t0;
+  let cells = `<div class="dh">${DOW.join('</div><div class="dh">')}</div><div class="dh">Нед.</div>`;
+  let s = start;
+  for (let w = 0; w < 6; w++) {
+    if (w > 0 && +s.slice(5, 7) !== m && s > first) break;
+    let weekPts = 0;
+    for (let i = 0; i < 7; i++) {
+      const sum = F.daySummary(kid, s, S.data, S.cfg, t0);
+      weekPts += sum.pts;
+      const other = +s.slice(5, 7) !== m;
+      const x2 = (S.cfg.days?.[s]?.x2 || []).length;
+      const ov = S.cfg.days?.[s]?.type && S.cfg.days[s].type !== "auto";
+      cells += `<button class="cell ${sum.info.type === "off" ? "off" : ""} ${other ? "other" : ""} ${s === t0 ? "today" : ""} ${s === S.selDay ? "sel" : ""}" data-act="selDay" data-id="${s}" aria-label="${humanDay(s)}">
+        ${x2 ? `<span class="flag">×2</span>` : ov ? `<span class="flag">📌</span>` : sum.info.reason === "holiday" ? `<span class="flag">🎉</span>` : ""}
+        <span class="d">${+s.slice(8)}</span>${sum.pts ? `<span class="p num">+${sum.pts}</span>` : ""}${sum.missed.length ? `<span class="m">−${sum.missed.length}</span>` : ""}${s > t0 && sum.planned.length ? `<span class="f">${sum.planned.length} дел</span>` : ""}</button>`;
+      s = F.addDays(s, 1);
+    }
+    cells += `<div class="wk num" title="Баллы за неделю">${weekPts ? "+" + weekPts : "·"}</div>`;
+  }
+  let out = `<section class="card">${parentMode && kids.length > 1 ? `<div class="chips">${kids.map(k => `<button class="chip" data-act="calKid" data-id="${k.id}" aria-pressed="${k.id === kid}">${esc(k.name)}</button>`).join("")}</div>` : ""}
+    <div class="cal-head"><button class="btn sm ghost" data-act="calPrev" aria-label="Предыдущий месяц">←</button><b>${MONTHS[m - 1]} ${y}</b><button class="btn sm ghost" data-act="calNext" aria-label="Следующий месяц">→</button></div>
+    <div class="cal">${cells}</div>
+    <div class="legend"><span><i style="background:var(--off)"></i>выходной</span><span>🎉 праздник</span><span>📌 изменено родителями</span><span>×2 двойные баллы</span><span style="color:var(--bad);font-weight:800">−N пропущено</span></div></section>`;
+  out += dayPanel(kid, S.selDay, parentMode);
+  return out;
+}
+function dayPanel(kid, s, parentMode) {
+  const t0 = today(), sum = F.daySummary(kid, s, S.data, S.cfg, t0), k = kidById(kid);
+  const ws = F.weekStart(s), we = F.weekEnd(s);
+  let weekPts = 0; for (let d = ws; d <= we; d = F.addDays(d, 1)) weekPts += F.daySummary(kid, d, S.data, S.cfg, t0).pts;
+  const activeAt = F.atTime(we, F.creditTime(S.cfg));
+  const info = sum.info;
+  let out = `<section class="card"><div class="card-head"><h2>${humanDay(s)}</h2><span class="pill ${info.type === "off" ? "ok" : "wait"}">${info.type === "off" ? "выходной" : "рабочий день"}</span></div>
+    ${info.name ? `<p class="hint">${esc(info.name)}</p>` : ""}
+    <div class="kids-sum"><div class="ks"><span>За день</span><span class="v num">+${sum.pts}</span></div><div class="ks"><span>За неделю ${+ws.slice(8)}–${+we.slice(8)}</span><span class="v num">+${weekPts}</span><small class="hint">${Date.now() >= activeAt ? "уже доступны для трат" : `станут доступны ${+we.slice(8)} ${MONTHS_G[+we.slice(5, 7) - 1]} в ${F.creditTime(S.cfg)}`}</small></div></div>`;
+  const rows = [];
+  sum.done.forEach(e => rows.push(`<div class="it"><span>${esc(e.title)}${F.mult(S.cfg, s, e.ref) > 1 ? `<span class="x2">×2</span>` : ""}<br><small>${fmtTime(e.at)}</small></span>${e.status === "ok" ? `<span class="pill ok">принято</span>` : e.status === "no" ? `<span class="pill no">не засчитано</span>` : e.status === "redo" ? `<span class="pill wait">доработка</span>` : `<span class="pill wait">проверяется</span>`}<span class="delta num ${e.status === "ok" ? "plus" : ""}">+${e.value}</span></div>`));
+  sum.missed.forEach(t => rows.push(`<div class="it"><span>${esc(t.title)}<br><small>обязательное дело${t.time ? " · " + esc(t.time) : ""}</small></span><span class="pill no">пропущено</span>${parentMode ? `<button class="btn sm ghost" data-act="credit" data-id="${t.id}" data-kid="${kid}">Засчитать</button>` : `<span class="delta">0</span>`}</div>`));
+  sum.gifts.forEach(g => rows.push(`<div class="it"><span>${g.kind === "gift" ? "🎁 Подарок от родителей" : g.pts >= 0 ? "🏅 Бонус" : "⚠️ Списание"}${g.msg ? `<br><small>${esc(g.msg)}</small>` : ""}</span><span></span><span class="delta num ${g.pts >= 0 ? "plus" : "minus"}">${g.pts >= 0 ? "+" : "−"}${Math.abs(g.pts)}</span></div>`));
+  if (s >= t0) {
+    const doneIds = new Set(sum.done.map(e => e.ref));
+    sum.planned.filter(t => !doneIds.has(t.id)).sort((a, b) => (a.time || "99").localeCompare(b.time || "99")).forEach(t => rows.push(`<div class="it"><span>${t.time ? `<b>${esc(t.time)}</b> ` : ""}${esc(t.title)}${F.mult(S.cfg, s, t.id) > 1 ? `<span class="x2">×2</span>` : ""}<br><small>${t.mandatory ? "обязательно" : "по желанию"}</small></span><span class="pill wait">запланировано</span><span class="delta num">+${t.pts * F.mult(S.cfg, s, t.id)}</span></div>`));
+  }
+  out += rows.length ? `<div class="list">${rows.join("")}</div>` : `<div class="empty">${s > t0 ? "Дел по расписанию нет." : "В этот день ничего не отмечено."}</div>`;
+  if (parentMode) {
+    const ov = S.cfg.days?.[s] || {};
+    const tasks = F.live(S.cfg.tasks).filter(t => t.active !== false && F.forKid(t, kid) && (!t.bound || F.applies(t, s, S.cfg)));
+    out += `<h3>Настроить день (для всех детей)</h3>
+      <div class="seg" role="group" aria-label="Тип дня">${[["auto", "По календарю"], ["off", "Выходной"], ["work", "Рабочий"]].map(([v, n]) => `<button data-act="dayType" data-id="${v}" aria-pressed="${(ov.type || "auto") === v}">${n}</button>`).join("")}</div>
+      <p class="hint">Двойные баллы в этот день:</p>
+      <div class="chips">${tasks.map(t => `<button class="chip" data-act="dayX2" data-id="${t.id}" aria-pressed="${(ov.x2 || []).includes(t.id)}">×2 ${esc(t.title)}</button>`).join("") || `<span class="hint">Нет дел на этот день.</span>`}</div>`;
+  }
+  return out + `</section>`;
+}
+
+/* ====================== РОДИТЕЛЬ ====================== */
+const AIL = { ok: "похоже, выполнено", redo: "похоже, нужна доработка", unsure: "не уверен" };
+function parentReview() {
+  const pend = pendingList().sort((a, b) => a.at - b.at);
+  let out = `<section class="card"><h2>Счета детей</h2><div class="kids-sum">${kidsList().map(k => { const a = acct(k.id); return `<div class="ks"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">копится ${a.locked} · сегодня +${a.today} · 🔥 ${streak(k.id)}</small></div>`; }).join("")}</div></section>`;
+  out += `<section class="card"><h2>Ждут проверки${pend.length ? " · " + pend.length : ""}</h2>`;
+  if (!pend.length) out += `<div class="empty">Всё проверено. Новых заявок нет.</div>`;
+  else out += pend.map(e => {
+    const k = kidById(e.kid);
+    const ai = e.dec?.ai && e.dec.ai.forAt === e.at ? `<div class="ai">🤖 ИИ: <b class="${e.dec.ai.verdict}">${AIL[e.dec.ai.verdict] || ""}</b>${e.dec.ai.comment ? ` — ${esc(e.dec.ai.comment)}` : ""}</div>` : (e.photos?.length ? `<div class="ai hint">🤖 ИИ посмотрит фото в течение 5 минут</div>` : "");
+    const photos = e.photos?.length ? `<div class="photos">${e.photos.map(p => S.photos[p] ? `<button class="ph" data-act="zoom" data-id="${p}" aria-label="Открыть фото"><img src="${S.photos[p]}" alt=""></button>` : `<span class="ph" data-photo="${p}">загрузка…</span>`).join("")}</div>` : "";
+    const btns = e.type === "wish" ? `<button class="btn ok sm" data-act="approve" data-id="${e.id}">Выдать</button><button class="btn no sm" data-act="reject" data-id="${e.id}">Отказать</button>`
+      : `<button class="btn ok sm" data-act="approve" data-id="${e.id}">Принять</button><button class="btn sm ghost" data-act="redo" data-id="${e.id}">На доработку</button><button class="btn no sm" data-act="reject" data-id="${e.id}">Не засчитать</button>`;
+    return `<div class="req"><div><b>${e.type === "wish" ? "🎁 Хочет обменять: " : ""}${esc(e.title)}</b><br><small class="hint">${esc(k?.name || "")} · ${humanDay(e.day)}, ${fmtTime(e.at)} · <span class="num">${e.type === "wish" ? "−" : "+"}${e.value}</span>${F.mult(S.cfg, e.day, e.ref) > 1 && e.type === "task" ? " (×2)" : ""}${e.late ? " · с опозданием" : ""}${e.manual ? " · засчитано родителем" : ""}</small></div>
+      ${e.checks?.length ? `<ul class="checks-ro">${e.checks.map(c => `<li>☑ ${esc(c)}</li>`).join("")}</ul>` : ""}${photos}${e.resent ? `<small class="hint">Прислано повторно после доработки</small>` : ""}${ai}
+      <div class="act">${btns}</div></div>`;
+  }).join("");
+  out += `<p class="hint">Дети видят решения как итог автоматической проверки. Комментарий «на доработку» они увидят с пометкой «Проверка».</p></section>`;
+  const recent = S.data.entries.filter(e => e.dec?.status && e.type !== "game").sort((a, b) => (b.dec.decidedAt || 0) - (a.dec.decidedAt || 0)).slice(0, 8);
+  if (recent.length) out += `<section class="card"><h2>Недавние решения</h2><div class="list">${recent.map(e => `<div class="it"><span>${esc(kidById(e.kid)?.name || "")}: ${esc(e.title)}<br><small>${fmtDate(e.dec.decidedAt || e.at)}</small></span><span class="pill ${e.status === "ok" ? "ok" : e.status === "no" ? "no" : "wait"}">${{ ok: "принято", no: "отклонено", redo: "доработка", pending: "повторно" }[e.status]}</span><button class="btn sm ghost" data-act="undo" data-id="${e.id}">Отменить</button></div>`).join("")}</div></section>`;
+  setTimeout(loadPhotos, 0);
+  return out;
+}
+async function loadPhotos() {
+  for (const el of document.querySelectorAll("[data-photo]")) {
+    const id = el.dataset.photo; if (S.photos[id]) continue;
+    try { const d = await S.be.getPhoto(id); S.photos[id] = d || ""; } catch (_) { S.photos[id] = ""; }
+    if (S.photos[id]) el.outerHTML = `<button class="ph" data-act="zoom" data-id="${id}" aria-label="Открыть фото"><img src="${S.photos[id]}" alt=""></button>`;
+    else el.textContent = "фото удалено";
+  }
+}
+function parentTasks() {
+  const all = F.live(S.cfg.tasks);
+  const descr = t => {
+    const parts = [`+${t.pts}`, CATS[t.cat]?.n];
+    if (t.bound) { const sc = t.schedule || {}; parts.push(sc.mode === "workdays" ? "рабочие дни" : sc.mode === "offdays" ? "выходные" : (sc.days || []).map(d => DOW[d - 1]).join(" ")); if (t.time) parts.push("⏰ " + t.time + (t.deadline === "strict" ? ` (строго, +${t.grace ?? 30} мин)` : t.deadline === "late" ? ` (позже — ${t.latePct ?? 50}%)` : "") + (t.repeat ? ` 🔁 ${t.repeat} мин` : "")); }
+    else parts.push(t.freq === "week" ? `${t.times || 1} р. в неделю` : FREQ[t.freq]);
+    parts.push(t.who === "all" ? "всем" : esc(kidById(t.who)?.name || ""));
+    if (t.checklist?.length) parts.push("☑ " + t.checklist.length); if (t.photo) parts.push("📷");
+    if (t.active === false) parts.push("выключено");
+    return parts.join(" · ");
+  };
+  return ["mb", "ob", "mu", "ou"].map(c => {
+    const list = all.filter(t => F.category(t) === c).sort((a, b) => (a.time || "99").localeCompare(b.time || "99") || a.o - b.o);
+    return `<section class="card"><div class="card-head"><h2>${F.CATEGORY_NAMES[c]}</h2><button class="btn go sm" data-act="taskForm" data-cat="${c}">+ Добавить</button></div>
+      <p class="hint">${{ mb: "Привязаны к дням. По ним приходят напоминания, пропуски видны в календаре.", ob: "Привязаны к дням, но по желанию.", mu: "Нужно сделать N раз за неделю в любой день.", ou: "Можно делать когда угодно ради баллов." }[c]}</p>
+      <div>${list.map(t => `<div class="row-edit ${t.active === false ? "off" : ""}"><div class="t"><b>${esc(t.title)}</b><br><small>${descr(t)}</small></div><button class="btn sm" data-act="taskForm" data-id="${t.id}">Изменить</button></div>`).join("") || `<div class="empty">Пока пусто.</div>`}</div></section>`;
+  }).join("");
+}
+function parentRewards() {
+  const kids = kidsList();
+  let out = `<section class="card"><h2>🎁 Подарить баллы</h2><p class="hint">Ребёнок увидит радостное сообщение с вашими словами. Баллы сразу можно тратить.</p>
+    <form class="grid" data-form="gift"><label>Кому<select id="g-kid" name="kid">${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("")}</select></label>
+    <label>Сколько баллов<input id="g-pts" name="pts" type="number" inputmode="numeric" min="1" value="20" required></label>
+    <label class="full">Сообщение<input id="g-msg" name="msg" placeholder="Например: Спасибо, что помог бабушке!" maxlength="200"></label>
+    <div><button class="btn go">Подарить</button></div></form>
+    <details><summary>Бонус или списание без поздравления</summary><form class="grid" data-form="bonus"><label>Кому<select id="b-kid" name="kid">${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("")}</select></label>
+    <label>Баллы (минус — списать)<input id="b-pts" name="pts" type="number" inputmode="numeric" value="-10" required></label><label class="full">Причина<input id="b-why" name="why" required></label><div><button class="btn dark">Применить</button></div></form></details></section>`;
+  out += `<section class="card"><div class="card-head"><h2>Магазин желаний</h2><button class="btn go sm" data-act="wishForm">+ Добавить</button></div>
+    <div>${F.live(S.cfg.wishes).sort((a, b) => a.cost - b.cost).map(w => `<div class="row-edit"><div class="t"><b>${esc(w.title)}</b><br><small class="num">${w.cost} баллов · ${w.who === "all" ? "всем" : esc(kidById(w.who)?.name || "")}</small></div><button class="btn sm" data-act="wishForm" data-id="${w.id}">Изменить</button></div>`).join("") || `<div class="empty">Нет желаний.</div>`}</div></section>`;
+  return out;
+}
+function parentFamily() {
+  const st = S.cfg.settings || {};
+  const members = S.members.slice().sort((a, b) => (a.role === "parent" ? 0 : 1) - (b.role === "parent" ? 0 : 1));
+  let out = `<section class="card"><h2>Участники</h2><div>${members.map(m => `<div class="row-edit"><div class="t"><b>${esc(m.name || m.email || "Без имени")}</b>${m.uid === S.user.uid ? " (вы)" : ""}<br><small>${m.role === "parent" ? "родитель" : "ребёнок: " + esc(kidById(m.kidId)?.name || "?")} · ${esc(m.email || "")} · ${(m.tokens || []).length ? "🔔 уведомления включены" : "без уведомлений"}</small></div>
+      ${m.uid !== S.user.uid ? `<button class="btn sm no" data-act="removeMember" data-id="${m.uid}">Удалить</button>` : ""}</div>`).join("")}</div>
+    <h3>Пригласить</h3><div class="btnrow"><button class="btn dark sm" data-act="invite" data-id="parent">Второго родителя</button>${kidsList().map(k => `<button class="btn sm" data-act="invite" data-id="${k.id}">Ребёнка: ${esc(k.name)}</button>`).join("")}</div>
+    <p class="hint">Код действует 7 дней. Ребёнку нужен свой Google-аккаунт (для детей до 13 лет — через Google Family Link).</p></section>`;
+  out += `<section class="card"><h2>🔔 Уведомления на этом устройстве</h2><p class="hint">Родителям приходят новые заявки на проверку, детям — напоминания об обязательных делах и подарки. На iPhone сначала добавьте приложение на экран «Домой» (Поделиться → На экран «Домой»).</p>
+    <div class="btnrow"><button class="btn go" data-act="push">Включить уведомления</button><button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
+  out += `<section class="card"><h2>Дети</h2><form class="grid" data-form="kids">${kidsList().map((k, i) => `
+      <label>Имя<input id="kn-${k.id}" name="n-${k.id}" value="${esc(k.name)}" required></label>
+      <label>Возраст<input id="ka-${k.id}" name="a-${k.id}" type="number" inputmode="numeric" min="3" max="18" value="${k.age || ""}"></label>
+      <label>Цвет<select id="kc-${k.id}" name="c-${k.id}">${Object.keys(COLORS).map(c => `<option value="${c}" ${k.color === c ? "selected" : ""}>${{ violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой" }[c]}</option>`).join("")}</select></label>
+      <div><button type="button" class="btn sm ghost" data-act="preview" data-id="${k.id}">Глазами ребёнка</button></div>`).join("")}
+      <div class="full btnrow"><button class="btn dark">Сохранить</button><button type="button" class="btn ghost" data-act="addKid">+ Добавить ребёнка</button></div></form></section>`;
+  out += `<section class="card"><h2>Правила баллов и календарь</h2><form class="grid" data-form="settings">
+      <label>Время вечернего начисления<input id="s-ct" name="ct" type="time" value="${esc(st.creditTime || "21:00")}"></label>
+      <label class="inline full"><input id="s-by" name="by" type="checkbox" ${st.belarus !== false ? "checked" : ""}> Учитывать праздники и официальные переносы Беларуси</label>
+      <label class="inline full"><input id="s-ai" name="ai" type="checkbox" ${st.autoAI ? "checked" : ""}> Принимать задание автоматически, если ИИ уверен, что по фото всё выполнено</label>
+      <label>Хранить фото-отчёты<select id="s-ph" name="ph">${[[7, "1 неделю"], [14, "2 недели"], [30, "1 месяц"], [90, "3 месяца"], [0, "Свой срок…"]].map(([d, n]) => `<option value="${d}" ${(d === photoDays() && [7, 14, 30, 90].includes(d)) || (d === 0 && ![7, 14, 30, 90].includes(photoDays())) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label id="s-phd-l" ${[7, 14, 30, 90].includes(photoDays()) ? "hidden" : ""}>Свой срок, дней<input id="s-phd" name="phd" type="number" inputmode="numeric" min="1" max="365" value="${photoDays()}"></label>
+      <div><button class="btn dark">Сохранить</button></div></form>
+      <p class="hint">Фото старше выбранного срока удаляются автоматически раз в сутки, чтобы база оставалась в бесплатных лимитах. Фото заявок, которые ещё ждут проверки, не удаляются. Сами записи о выполненных делах и баллы остаются навсегда.</p>
+      <p class="hint">Баллы за принятые дела зачисляются каждый вечер в указанное время, а тратить их можно после воскресенья в это же время. Подарки доступны сразу. Выходные и двойные баллы на конкретный день меняются в «Календаре».</p></section>`;
+  out += `<section class="card"><h2>Аккаунт</h2><p class="hint">${esc(S.user.email || "")} · семья «${esc(S.cfg.name || "")}»</p><div class="btnrow">${S.families.length > 1 ? `<button class="btn" data-act="switchFamily">Сменить семью</button>` : ""}<button class="btn ghost" data-act="signOut">Выйти</button></div></section>`;
+  return out;
+}
+
+/* ---------- формы родителя ---------- */
+const whoOpts = sel => `<option value="all" ${sel === "all" ? "selected" : ""}>Всем детям</option>` + kidsList().map(k => `<option value="${k.id}" ${sel === k.id ? "selected" : ""}>${esc(k.name)}</option>`).join("");
+function taskForm(id, cat) {
+  const base = { title: "", cat: "home", pts: 10, who: "all", mandatory: cat ? cat[0] === "m" : true, bound: cat ? cat[1] === "b" : true, schedule: { mode: "workdays", days: [] }, time: "", deadline: "none", grace: 30, latePct: 50, repeat: 0, freq: "week", times: 1, checklist: [], photo: false, active: true };
+  const t = JSON.parse(JSON.stringify(S.cfg.tasks[id] || base));
+  t.schedule = t.schedule || { mode: "workdays", days: [] };
+  modal(`<h2>${id ? "Изменить дело" : "Новое дело"}</h2><form class="grid" id="tf">
+    <label class="full">Что сделать<input id="tf-title" name="title" required value="${esc(t.title)}"></label>
+    <div class="full seg" role="group" aria-label="Обязательность"><button type="button" data-k="mandatory" data-v="1" aria-pressed="${!!t.mandatory}">Обязательное</button><button type="button" data-k="mandatory" data-v="0" aria-pressed="${!t.mandatory}">Дополнительное</button></div>
+    <div class="full seg" role="group" aria-label="Привязка"><button type="button" data-k="bound" data-v="1" aria-pressed="${!!t.bound}">По дням недели</button><button type="button" data-k="bound" data-v="0" aria-pressed="${!t.bound}">Без привязки к дню</button></div>
+    <div class="full grid" id="tf-bound">
+      <label class="full">Когда<select id="tf-mode" name="mode"><option value="workdays">В рабочие (учебные) дни</option><option value="offdays">В выходные и праздники</option><option value="days">В выбранные дни недели</option></select></label>
+      <div class="full dows" id="tf-dows">${DOW.map((d, i) => `<button type="button" data-dow="${i + 1}" aria-pressed="${t.schedule.days.includes(i + 1)}">${d}</button>`).join("")}</div>
+      <label>Время (напоминание)<input id="tf-time" name="time" type="time" value="${esc(t.time || "")}"></label>
+      <label id="tf-rep-l">Повторять напоминание<select id="tf-rep" name="rep"><option value="0">Не повторять</option><option value="5">каждые 5 мин</option><option value="10">каждые 10 мин</option><option value="15">каждые 15 мин</option><option value="20">каждые 20 мин</option><option value="30">каждые 30 мин</option><option value="60">каждый час</option></select></label>
+      <label>Если не успел ко времени<select id="tf-dl" name="dl"><option value="none">Можно сделать до конца дня</option><option value="strict">Строгий срок: потом нельзя</option><option value="late">Можно позже за часть баллов</option></select></label>
+      <label id="tf-grace-l">Запас после времени, мин<input id="tf-grace" name="grace" type="number" inputmode="numeric" min="0" max="600" value="${t.grace ?? 30}"></label>
+      <label id="tf-pct-l">Баллы за опоздание, %<input id="tf-pct" name="pct" type="number" inputmode="numeric" min="0" max="100" value="${t.latePct ?? 50}"></label>
+      <p class="hint full">Напоминание придёт на телефон ребёнка за 5 минут до указанного времени (для обязательных дел). Повтор приходит, пока ребёнок не нажмёт «Готово!», но не после строгого срока и не после полуночи. Срок = время + запас; после него кнопка «Готово!» исчезает или меняется на «Сделал с опозданием».</p></div>
+    <div class="full grid" id="tf-unbound">
+      <label>Как часто<select id="tf-freq" name="freq"><option value="day">раз в день</option><option value="week">N раз в неделю</option><option value="many">сколько угодно</option><option value="once">один раз</option></select></label>
+      <label>Сколько раз в неделю<input id="tf-times" name="times" type="number" inputmode="numeric" min="1" max="14" value="${t.times || 1}"></label></div>
+    <label>Тип<select id="tf-cat" name="cat">${Object.entries(CATS).map(([k, v]) => `<option value="${k}" ${t.cat === k ? "selected" : ""}>${v.n}</option>`).join("")}</select></label>
+    <label>Баллы<input id="tf-pts" name="pts" type="number" inputmode="numeric" min="1" required value="${t.pts}"></label>
+    <label>Для кого<select id="tf-who" name="who">${whoOpts(t.who)}</select></label>
+    <label class="full">Чек-лист (каждый пункт с новой строки)<textarea id="tf-check" name="checklist" placeholder="Стол разобран&#10;Вещи в шкафу">${esc((t.checklist || []).join("\n"))}</textarea></label>
+    <label class="inline full"><input id="tf-photo" name="photo" type="checkbox" ${t.photo ? "checked" : ""}> Нужен фото-отчёт</label>
+    <label class="inline full"><input id="tf-active" name="active" type="checkbox" ${t.active !== false ? "checked" : ""}> Дело включено</label>
+  </form><p class="err" id="tf-err"></p>
+  <div class="btns">${id ? `<button class="btn no" id="tf-del">Удалить</button>` : ""}<button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn dark" id="tf-save">Сохранить</button></div>`,
+  m => {
+    const f = m.querySelector("#tf"); f.mode.value = t.schedule.mode || "workdays"; f.freq.value = t.freq || "week"; f.dl.value = t.deadline || "none"; f.rep.value = String(t.repeat || 0);
+    const sync = () => {
+      m.querySelector("#tf-bound").hidden = !t.bound; m.querySelector("#tf-unbound").hidden = t.bound;
+      m.querySelector("#tf-dows").hidden = f.mode.value !== "days";
+      f.times.parentElement.hidden = f.freq.value !== "week";
+      const hasT = !!f.time.value; f.dl.parentElement.hidden = !hasT; m.querySelector("#tf-rep-l").hidden = !hasT || !t.mandatory;
+      m.querySelector("#tf-grace-l").hidden = !hasT || f.dl.value === "none"; m.querySelector("#tf-pct-l").hidden = !hasT || f.dl.value !== "late";
+      m.querySelectorAll("[data-k]").forEach(b => b.setAttribute("aria-pressed", String(!!t[b.dataset.k] === (b.dataset.v === "1"))));
+    };
+    m.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { t[b.dataset.k] = b.dataset.v === "1"; sync(); });
+    m.querySelectorAll("[data-dow]").forEach(b => b.onclick = () => { const d = +b.dataset.dow; const i = t.schedule.days.indexOf(d); i >= 0 ? t.schedule.days.splice(i, 1) : t.schedule.days.push(d); b.setAttribute("aria-pressed", String(i < 0)); });
+    f.mode.onchange = sync; f.freq.onchange = sync; f.dl.onchange = sync; f.time.oninput = sync; sync();
+    const save = () => {
+      if (!f.reportValidity()) return;
+      if (t.bound && f.mode.value === "days" && !t.schedule.days.length) { m.querySelector("#tf-err").textContent = "Выберите хотя бы один день недели."; return; }
+      const tid = id || uid("t");
+      const task = { id: tid, o: S.cfg.tasks[id]?.o ?? Date.now(), del: false, title: f.title.value.trim(), cat: f.cat.value, pts: Math.max(1, parseInt(f.pts.value) || 1), who: f.who.value,
+        mandatory: !!t.mandatory, bound: !!t.bound, schedule: { mode: f.mode.value, days: t.schedule.days.slice().sort() }, time: t.bound ? f.time.value : "", deadline: t.bound && f.time.value ? f.dl.value : "none", grace: Math.max(0, parseInt(f.grace.value) || 0), repeat: t.mandatory && f.time.value ? parseInt(f.rep.value) || 0 : 0, latePct: Math.min(100, Math.max(0, parseInt(f.pct.value) || 0)),
+        freq: t.bound ? "day" : f.freq.value, times: Math.max(1, parseInt(f.times.value) || 1),
+        checklist: f.checklist.value.split("\n").map(x => x.trim()).filter(Boolean), photo: f.photo.checked, active: f.active.checked };
+      S.be.setFamily({ tasks: { [tid]: task } }).then(() => toast("Дело сохранено")).catch(fail); closeModal();
+    };
+    m.querySelector("#tf-save").onclick = save; f.onsubmit = e => { e.preventDefault(); save(); };
+    const del = m.querySelector("#tf-del"); if (del) del.onclick = () => ask(`Удалить «${t.title}»?`, "Удалить", () => S.be.setFamily({ tasks: { [id]: { ...S.cfg.tasks[id], del: true } } }).then(() => toast("Дело удалено")).catch(fail), true);
+  });
+}
+function wishForm(id) {
+  const w = S.cfg.wishes[id] || { title: "", cost: 100, who: "all" };
+  modal(`<h2>${id ? "Изменить желание" : "Новое желание"}</h2><form class="grid" id="wf">
+    <label class="full">Награда<input id="wf-title" name="title" required value="${esc(w.title)}"></label>
+    <label>Цена в баллах<input id="wf-cost" name="cost" type="number" inputmode="numeric" min="1" required value="${w.cost}"></label>
+    <label>Для кого<select id="wf-who" name="who">${whoOpts(w.who)}</select></label></form>
+    <div class="btns">${id ? `<button class="btn no" id="wf-del">Удалить</button>` : ""}<button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn dark" id="wf-save">Сохранить</button></div>`,
+  m => {
+    const f = m.querySelector("#wf");
+    const save = () => { if (!f.reportValidity()) return; const wid = id || uid("w");
+      S.be.setFamily({ wishes: { [wid]: { id: wid, o: w.o ?? Date.now(), del: false, title: f.title.value.trim(), cost: Math.max(1, parseInt(f.cost.value) || 1), who: f.who.value } } }).then(() => toast("Желание сохранено")).catch(fail); closeModal(); };
+    m.querySelector("#wf-save").onclick = save; f.onsubmit = e => { e.preventDefault(); save(); };
+    const del = m.querySelector("#wf-del"); if (del) del.onclick = () => ask(`Удалить «${w.title}»?`, "Удалить", () => S.be.setFamily({ wishes: { [id]: { ...w, del: true } } }).catch(fail), true);
+  });
+}
+function redoForm(e) {
+  const pre = e.dec?.ai && e.dec.ai.forAt === e.at && e.dec.ai.verdict !== "ok" ? e.dec.ai.comment : "";
+  modal(`<h2>На доработку</h2><p class="hint">«${esc(e.title)}». Ребёнок увидит текст как замечание проверки.</p>
+    <label>Что исправить<textarea id="redo-note" placeholder="Например: на столе ещё лежат тетради.">${esc(pre)}</textarea></label>
+    <div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn go" id="redo-ok">Отправить на доработку</button></div>`,
+  m => { const ta = m.querySelector("#redo-note"); ta.focus();
+    m.querySelector("#redo-ok").onclick = () => { decide(e, "redo", ta.value.trim()); closeModal(); }; });
+}
+function decide(e, status, note) {
+  const dec = { status, note: note ?? (status === "ok" && e.dec?.ai?.verdict === "ok" && e.dec.ai.forAt === e.at ? e.dec.ai.comment : ""), decidedAt: Date.now(), ai: e.dec?.ai || null };
+  S.be.putDecision(e.doc, e.id, dec).then(() => toast(status === "ok" ? (e.type === "wish" ? "Награда выдана" : `Принято: +${e.value}`) : status === "redo" ? "Отправлено на доработку" : e.type === "wish" ? "Отказано, баллы вернулись" : "Не засчитано")).catch(fail);
+}
+function showInvite(role, kidId) {
+  modal(`<h2>Код приглашения</h2><p class="hint">Создаю код…</p>`, async m => {
+    try {
+      const code = await S.be.createInvite(S.user, role === "parent" ? "parent" : "child", role === "parent" ? null : kidId);
+      const link = location.origin + "/?join=" + code;
+      const who = role === "parent" ? "второго родителя" : kidById(kidId)?.name;
+      m.innerHTML = `<h2>Приглашение для: ${esc(who)}</h2><div class="code">${code}</div>
+        <p class="hint">Откройте ссылку на устройстве ${role === "parent" ? "второго родителя" : "ребёнка"} и войдите через Google. Или войдите и введите код вручную. Код действует 7 дней.</p>
+        <input id="inv-link" readonly value="${esc(link)}"><div class="btns"><button class="btn ghost" data-act="closeModal">Закрыть</button><button class="btn dark" id="inv-copy">Скопировать ссылку</button></div>`;
+      m.querySelector("#inv-copy").onclick = () => { const i = m.querySelector("#inv-link"); navigator.clipboard?.writeText(link).then(() => toast("Ссылка скопирована"), () => { i.select(); toast("Выделено — скопируйте"); }); };
+    } catch (e) { fail(e); closeModal(); }
+  });
+}
+
+/* ---------- ребёнок: отправка дела ---------- */
+async function shrink(file, max, q) {
+  let img;
+  try { img = await createImageBitmap(file); }
+  catch (_) { img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
+  const k = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  let data = c.toDataURL("image/jpeg", q);
+  while (data.length > 600000 && q > .35) { q -= .1; data = c.toDataURL("image/jpeg", q); }
+  return data;
+}
+function submitTask(t, entryId) {
+  const kid = viewingKid(), s = today();
+  const old = entryId && S.data.entries.find(e => e.id === entryId);
+  const dl = F.deadline(t, s, S.cfg);
+  if (!old && dl && dl.phase === "closed") { toast("Время для этого дела вышло"); return; }
+  const lateInfo = !old && dl && dl.phase === "late" ? { late: true, latePct: dl.pct } : {};
+  const mk = extra => ({ id: uid(), kid, type: "task", ref: t.id, title: t.title, pts: t.pts, day: s, at: Date.now(), checks: [], photos: [], resent: false, ...lateInfo, ...extra });
+  const save = entry => S.be.putEntry(kid, entry.day.slice(0, 7), entry);
+  if (!t.checklist?.length && !t.photo && !old) { save(mk({})).then(() => toast("Отправлено на проверку 🔍")).catch(fail); return; }
+  const picked = [];
+  modal(`<h2>${esc(t.title)}</h2>
+    ${t.checklist?.length ? `<p class="hint">Отметь всё, что сделано:</p><div class="checks">${t.checklist.map((c, i) => `<label class="chk"><input type="checkbox" id="ck-${i}" data-c="${i}"> ${esc(c)}</label>`).join("")}</div>` : ""}
+    <p class="hint">${t.photo ? "Сфотографируй результат — система проверит фото. До 3 снимков." : "Фото можно добавить по желанию."}</p><div class="photos" id="phs"></div>
+    <p class="err" id="sub-err"></p><div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn go" id="sub-ok">Отправить на проверку</button></div>`,
+  m => {
+    const box = m.querySelector("#phs");
+    const draw = () => {
+      box.innerHTML = picked.map((p, i) => `<div class="ph"><img src="${p.url}" alt=""><button class="x" data-rm="${i}" aria-label="Убрать фото">×</button></div>`).join("") + (picked.length < 3 ? `<label class="addph">📷<br>Добавить фото<input type="file" id="ph-in" accept="image/*" multiple></label>` : "");
+      const inp = box.querySelector("#ph-in"); if (inp) inp.onchange = () => { for (const f of inp.files) if (picked.length < 3 && f.type.startsWith("image/")) picked.push({ file: f, url: URL.createObjectURL(f) }); draw(); };
+      box.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { picked.splice(+b.dataset.rm, 1); draw(); });
+    };
+    draw();
+    const ok = m.querySelector("#sub-ok"), err = m.querySelector("#sub-err");
+    ok.onclick = async () => {
+      if ([...m.querySelectorAll("[data-c]")].some(b => !b.checked)) { err.textContent = "Сначала выполни и отметь все пункты списка."; return; }
+      if (t.photo && !picked.length) { err.textContent = "Добавь хотя бы одно фото — без него проверка не пройдёт."; return; }
+      ok.disabled = true; ok.textContent = "Отправляю…"; err.textContent = "";
+      try {
+        const photos = [];
+        for (const p of picked) { const id = uid("p"); await S.be.putPhoto(id, { data: await shrink(p.file, 1024, .72), kid, at: Date.now() }); photos.push(id); }
+        const entry = old ? { ...stripEntry(old), at: Date.now(), checks: t.checklist || [], photos, resent: true } : mk({ checks: t.checklist || [], photos });
+        await save(entry); closeModal(); toast("Отправлено на проверку 🔍");
+      } catch (e) { ok.disabled = false; ok.textContent = "Отправить на проверку"; err.textContent = "Не получилось отправить. Проверь интернет и попробуй ещё раз."; console.error(e); }
+    };
+  });
+}
+const stripEntry = e => { const { status, dec, value, doc, ...rest } = e; return rest; };
+
+setInterval(() => { if (viewingKid() && S.tab === "today" && !document.querySelector(".scrim")) rerender(); }, 60000);
+
+/* ====================== СОБЫТИЯ ====================== */
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act, id = el.dataset.id;
+  if (act === "closeModal") { if (e.target === el) closeModal(); return; }
+  if (act === "tab") { S.tab = id; window.scrollTo(0, 0); render(); return; }
+  if (act === "signIn") return S.be.signIn().catch(err => toast("Не удалось войти: " + (err.message || err.code)));
+  if (act === "signOut") return S.be.signOut();
+  if (act === "demoRole") { const uidMap = { parent: "demo-parent", k1: "demo-k1", k2: "demo-k2" }; S.user = { ...S.user, uid: uidMap[id] }; S.me = S.members.find(m => m.uid === S.user.uid); S.preview = null; S.tab = null; S.prevStatus = null; recompute(); render(); return; }
+  if (act === "preview") { S.preview = id; S.tab = "today"; window.scrollTo(0, 0); render(); return; }
+  if (act === "endPreview") { S.preview = null; S.tab = "family"; render(); return; }
+  if (act === "kidMenu") { modal(`<h2>${esc(S.user.displayName || "")}</h2><p class="hint">${esc(S.user.email || "")}</p><div class="btns"><button class="btn" data-act="push">Включить уведомления</button><button class="btn ghost" data-act="signOut">Выйти</button></div>`); return; }
+  if (act === "done") { const t = S.cfg.tasks[id]; if (t) submitTask(t, el.dataset.entry); return; }
+  if (act === "wish") {
+    const w = S.cfg.wishes[id], kid = viewingKid(); if (!w) return;
+    ask(`Обменять ${ptsW(w.cost)} на «${w.title}»?`, "Обменять", () => {
+      if (acct(kid).available < w.cost) return toast("Не хватает баллов");
+      S.be.putEntry(kid, F.monthKey(), { id: uid(), kid, type: "wish", ref: w.id, title: w.title, pts: w.cost, day: today(), at: Date.now() }).then(() => toast("Заявка отправлена 🎁")).catch(fail);
+    }); return;
+  }
+  if (act === "approve" || act === "reject") { const en = S.data.entries.find(x => x.id === id); if (en) decide(en, act === "approve" ? "ok" : "no"); return; }
+  if (act === "redo") { const en = S.data.entries.find(x => x.id === id); if (en) redoForm(en); return; }
+  if (act === "undo") { const en = S.data.entries.find(x => x.id === id); if (en) S.be.putDecision(en.doc, en.id, { status: "", note: "", decidedAt: Date.now(), ai: en.dec?.ai || null }).then(() => toast("Решение отменено — заявка снова на проверке")).catch(fail); return; }
+  if (act === "zoom") { const l = document.createElement("div"); l.className = "light"; l.innerHTML = `<img src="${S.photos[id]}" alt="Фото-отчёт">`; l.onclick = () => l.remove(); document.body.appendChild(l); return; }
+  if (act === "taskForm") return taskForm(id, el.dataset.cat);
+  if (act === "wishForm") return wishForm(id);
+  if (act === "credit") {
+    const t = S.cfg.tasks[id], kid = el.dataset.kid, s = S.selDay; if (!t) return;
+    ask(`Засчитать «${t.title}» за ${humanDay(s)}?`, "Засчитать", async () => {
+      const e2 = { id: uid(), kid, type: "task", ref: t.id, title: t.title, pts: t.pts, day: s, at: Date.now(), checks: [], photos: [], resent: false, manual: true };
+      try { await S.be.putEntry(kid, s.slice(0, 7), e2); await S.be.putDecision(kid + "_" + s.slice(0, 7), e2.id, { status: "ok", note: "", decidedAt: Date.now(), ai: null }); toast(`Засчитано: +${t.pts * F.mult(S.cfg, s, t.id)}`); } catch (err) { fail(err); }
+    }); return;
+  }
+  if (act === "selDay") { S.selDay = id; render(); return; }
+  if (act === "calKid") { S.calKid = id; render(); return; }
+  if (act === "calPrev" || act === "calNext") { const [y, m] = S.calMonth.split("-").map(Number); S.calMonth = F.monthKey(new Date(y, m - 1 + (act === "calNext" ? 1 : -1), 1)); render(); return; }
+  if (act === "dayType") { S.be.setFamily({ days: { [S.selDay]: { type: id } } }).then(() => toast(id === "auto" ? "День как в календаре" : id === "off" ? "День сделан выходным" : "День сделан рабочим")).catch(fail); return; }
+  if (act === "dayX2") { const cur = (S.cfg.days?.[S.selDay]?.x2 || []).slice(); const i = cur.indexOf(id); i >= 0 ? cur.splice(i, 1) : cur.push(id); S.be.setFamily({ days: { [S.selDay]: { x2: cur } } }).then(() => toast(i >= 0 ? "Двойные баллы сняты" : "В этот день баллы ×2")).catch(fail); return; }
+  if (act === "invite") return showInvite(id === "parent" ? "parent" : "child", id);
+  if (act === "removeMember") { const mm = S.members.find(x => x.uid === id); ask(`Удалить ${mm?.name || mm?.email || "участника"} из семьи?`, "Удалить", () => S.be.removeMember(id).then(() => toast("Участник удалён")).catch(fail), true); return; }
+  if (act === "push") { S.be.enablePush(S.user).then(() => { toast("Уведомления включены 🔔"); beep("good"); }, err => toast(err.message || "Не удалось включить уведомления")); return; }
+  if (act === "beep") return beep("alert");
+  if (act === "addKid") { const n = kidsList().length + 1; const k = { id: "k" + Date.now().toString(36), name: "Ребёнок " + n, age: 10, color: ["violet", "teal", "rose", "gold"][n % 4] }; S.be.setFamily({ kids: [...kidsList(), k] }).then(() => toast("Ребёнок добавлен — укажите имя")).catch(fail); return; }
+  if (act === "switchFamily" || act === "leaveFamily") { lsSet("fq-fid", null); S.fid = null; S.loaded = false; stopWatch(); boot2(true); return; }
+});
+document.addEventListener("submit", e => {
+  const f = e.target; if (!f.dataset.form) return; e.preventDefault();
+  const kind = f.dataset.form;
+  if (kind === "join") { const code = f.code.value.trim().toUpperCase(); S.be.join(S.user, code).then(fid => { history.replaceState(null, "", "/"); openFamily(fid); }, err => toast(err.message || "Не удалось присоединиться", true)); return; }
+  if (kind === "create") {
+    const kids = [1, 2, 3].map(i => ({ n: f["k" + i].value.trim(), a: parseInt(f["a" + i].value) || 10 })).filter(x => x.n)
+      .map((x, i) => ({ id: "k" + (i + 1), name: x.n, age: x.a, color: ["violet", "teal", "rose"][i] }));
+    S.be.createFamily(S.user, f.name.value.trim(), kids, starterSet(kids)).then(openFamily).catch(fail); return;
+  }
+  if (kind === "gift" || kind === "bonus") {
+    const kid = f.kid.value, pts = parseInt(f.pts.value) || 0; if (!pts) return toast("Укажите баллы");
+    const g = { id: uid("g"), kid, kind, pts: kind === "gift" ? Math.abs(pts) : pts, msg: (kind === "gift" ? f.msg.value : f.why.value).trim(), at: Date.now(), day: today() };
+    S.be.putGift(kid + "_" + F.monthKey(), g).then(() => { toast(kind === "gift" ? `🎁 Подарок отправлен: +${g.pts}` : "Готово"); f.reset(); }).catch(fail); return;
+  }
+  if (kind === "kids") {
+    const kids = kidsList().map(k => ({ ...k, name: f["n-" + k.id].value.trim() || k.name, age: parseInt(f["a-" + k.id].value) || k.age, color: f["c-" + k.id].value }));
+    S.be.setFamily({ kids }).then(() => toast("Сохранено")).catch(fail); return;
+  }
+  if (kind === "settings") {
+    const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14));
+    S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00", belarus: f.by.checked, autoAI: f.ai.checked, photoDays: ph } }).then(() => toast("Настройки сохранены")).catch(fail);
+  }
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "s-ph") { const l = document.getElementById("s-phd-l"); if (l) l.hidden = e.target.value !== "0"; }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); document.querySelector(".light")?.remove(); } });
+window.addEventListener("fq-push", e => { toast("🔔 " + (e.detail.title || "") + (e.detail.body ? ": " + e.detail.body : ""), true); beep("alert"); });
+
+/* ====================== ЗАПУСК ====================== */
+let stopWatch = () => {};
+function openFamily(fid) {
+  stopWatch(); S.fid = fid; S.loaded = false; S.prevStatus = null; S.preview = null; S.tab = null; lsSet("fq-fid", fid);
+  if (!S.families.includes(fid)) S.families.push(fid);
+  S.be.use(fid); render();
+  let got = { family: false, members: false, kidlog: false, plog: false };
+  const ready = () => { if (Object.values(got).every(Boolean)) { S.loaded = true; recompute(); rerender(); } };
+  stopWatch = S.be.watch({
+    family: d => { S.cfg = d; got.family = true; if (got.kidlog) recompute(); ready(); if (S.loaded) rerender(); },
+    members: list => { S.members = list; S.me = list.find(m => m.uid === S.user.uid) || null; got.members = true; ready(); if (S.loaded) rerender(); },
+    kidlog: list => { S.kidlogs = list; got.kidlog = true; if (S.loaded) { recompute(); rerender(); } else ready(); },
+    plog: list => { S.plogs = list; got.plog = true; if (S.loaded) { recompute(); rerender(); } else ready(); },
+    error: err => { console.error(err); if (err.code === "permission-denied") { S.me = null; S.loaded = true; render(); } },
+  });
+  S.be.resumePush?.();
+  // родители раз в сессию чистят фото старше срока из настроек (основная чистка — на сервере раз в сутки)
+  setTimeout(async () => {
+    if (!isParent() || S.be.demo) return;
+    try {
+      const keep = new Set(pendingList().flatMap(e => e.photos || []));
+      for (const id of await S.be.oldPhotos(Date.now() - photoDays() * 864e5)) if (!keep.has(id)) await S.be.delPhoto(id);
+    } catch (_) {}
+  }, 15000);
+}
+async function boot2(chooser) {
+  try {
+    S.families = await S.be.myFamilies(S.user);
+    const join = new URLSearchParams(location.search).get("join");
+    if (join && !chooser) { render(); return; } // покажем форму с кодом
+    const saved = lsGet("fq-fid");
+    const fid = !chooser && (S.families.includes(saved) ? saved : S.families[0]);
+    if (fid) openFamily(fid); else render();
+  } catch (e) { console.error(e); toast("Не удалось загрузить данные. Проверьте интернет.", true); render(); }
+}
+(async function boot() {
+  const demo = new URLSearchParams(location.search).has("demo");
+  try { S.be = demo ? demoBackend(demoSeed) : await firebaseBackend(); }
+  catch (e) { S.error = "Не найдена конфигурация Firebase. Откройте приложение по адресу, выданному Firebase Hosting."; S.be = {}; render(); return; }
+  S.user = undefined; render();
+  S.be.onAuth(async u => {
+    S.user = u || null;
+    if (!u) { stopWatch(); S.fid = null; render(); return; }
+    if (S.be.demo) { S.families = ["demo"]; openFamily("demo"); return; }
+    boot2(false);
+  });
+  if ("serviceWorker" in navigator && !demo) navigator.serviceWorker.register("/firebase-messaging-sw.js").catch(() => {});
+})();

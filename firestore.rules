@@ -1,0 +1,70 @@
+rules_version = '2';
+// Каждая семья видит только свои данные. Роли: parent — всё; child — только свои записи.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function memberPath(fid) { return /databases/$(database)/documents/families/$(fid)/members/$(request.auth.uid); }
+    function isMember(fid) { return signedIn() && exists(memberPath(fid)); }
+    function member(fid) { return get(memberPath(fid)).data; }
+    function isParent(fid) { return isMember(fid) && member(fid).role == 'parent'; }
+    function isChild(fid) { return isMember(fid) && member(fid).role == 'child'; }
+    function invite(code) { return get(/databases/$(database)/documents/invites/$(code)).data; }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid && isParent(request.resource.data.fid);
+      allow delete: if signedIn() && isParent(resource.data.fid);
+    }
+
+    match /families/{fid} {
+      allow read: if isMember(fid);
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isParent(fid);
+
+      match /members/{uid} {
+        allow read: if isMember(fid);
+        allow create: if signedIn() && request.auth.uid == uid && (
+          (get(/databases/$(database)/documents/families/$(fid)).data.createdBy == request.auth.uid
+            && request.resource.data.role == 'parent')
+          || (request.resource.data.code is string
+            && invite(request.resource.data.code).fid == fid
+            && invite(request.resource.data.code).role == request.resource.data.role
+            && invite(request.resource.data.code).kidId == request.resource.data.kidId
+            && invite(request.resource.data.code).exp > request.time.toMillis())
+        );
+        allow update: if isParent(fid)
+          || (signedIn() && request.auth.uid == uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tokens', 'seen', 'name', 'photo']));
+        allow delete: if isParent(fid) || (signedIn() && request.auth.uid == uid);
+      }
+
+      // Что сделал ребёнок: задания, заявки на награды, игровое время.
+      match /kidlog/{docId} {
+        allow read: if isMember(fid);
+        allow write: if isParent(fid)
+          || (isChild(fid)
+              && docId.matches(member(fid).kidId + '_[0-9]{4}-[0-9]{2}')
+              && request.resource.data.kid == member(fid).kidId);
+      }
+      // Решения проверки, подарки и бонусы — пишут только родители.
+      match /plog/{docId} {
+        allow read: if isMember(fid);
+        allow write: if isParent(fid);
+      }
+      // Фото-отчёты (сжатые), удаляются по сроку из настроек семьи (по умолчанию 14 дней).
+      match /photos/{pid} {
+        allow read: if isMember(fid);
+        allow create: if isMember(fid) && request.resource.data.data is string && request.resource.data.data.size() < 900000;
+        allow delete: if isParent(fid);
+      }
+      // Служебные отметки сервер-скрипта (напоминания уже отправлены).
+      match /sent/{day} {
+        allow read, write: if false;
+      }
+    }
+  }
+}
