@@ -1,0 +1,12 @@
+[
+ "firestore.rules",
+ "public/app.js",
+ "public/backend.js",
+ "public/core.js",
+ "public/firebase-messaging-sw.js",
+ "public/icon-192.png",
+ "public/icon-512.png",
+ "public/index.html",
+ "public/manifest.webmanifest",
+ "public/styles.css"
+]

@@ -22,14 +22,14 @@ function waitOp(name, host, ver) {
   throw new Error("Операция " + name + " не завершилась вовремя");
 }
 
-/** Файлы репозитория: [{path, bytes}] из папки prefix. */
+/** Файлы репозитория: [{path, bytes}] из папки prefix (список — в deploy-files.json, без GitHub API). */
 function repoFiles(prefix) {
   var repo = prop("GITHUB_REPO"), branch = prop("GITHUB_BRANCH", "main");
   if (!repo) throw new Error("Укажите свойство GITHUB_REPO, например user/semeynye-kvesty");
-  var tree = JSON.parse(UrlFetchApp.fetch("https://api.github.com/repos/" + repo + "/git/trees/" + branch + "?recursive=1").getContentText());
-  return tree.tree.filter(function (t) { return t.type === "blob" && t.path.indexOf(prefix) === 0; }).map(function (t) {
-    var bytes = UrlFetchApp.fetch("https://raw.githubusercontent.com/" + repo + "/" + branch + "/" + t.path).getContent();
-    return { path: t.path, bytes: bytes };
+  var raw = "https://raw.githubusercontent.com/" + repo + "/" + branch + "/";
+  var list = JSON.parse(UrlFetchApp.fetch(raw + "deploy-files.json?t=" + Date.now()).getContentText());
+  return list.filter(function (p) { return p.indexOf(prefix) === 0; }).map(function (p) {
+    return { path: p, bytes: UrlFetchApp.fetch(raw + p + "?t=" + Date.now()).getContent() };
   });
 }
 function hex(bytes) { return bytes.map(function (b) { return ((b + 256) % 256).toString(16).padStart(2, "0"); }).join(""); }
