@@ -14,7 +14,8 @@ export async function firebaseBackend() {
     import(SDK + "firebase-firestore.js"), import(SDK + "firebase-messaging.js"),
   ]);
   const app = initializeApp(config);
-  const auth = A.getAuth(app);
+  // Вход сохраняется на устройстве: после закрытия приложения пароль не нужен, пока не нажат «Выйти».
+  const auth = A.initializeAuth(app, { persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence], popupRedirectResolver: A.browserPopupRedirectResolver });
   const db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
   const { doc, collection, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, updateDoc } = F;
   let fid = null, me = null;
