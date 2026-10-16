@@ -478,6 +478,14 @@ function hex(bytes) { return bytes.map(function (b) { return ((b + 256) % 256).t
 /** Подготовка проекта: база данных и веб-приложение (если их ещё нет). */
 function prepareProject() {
   var p = prop("PROJECT_ID");
+  var services = ["firestore.googleapis.com", "firebasehosting.googleapis.com", "firebaserules.googleapis.com",
+    "fcm.googleapis.com", "firebase.googleapis.com", "identitytoolkit.googleapis.com"];
+  var en = api("post", "https://serviceusage.googleapis.com/v1/projects/" + p + "/services:batchEnable", { serviceIds: services });
+  if (en.code < 300) {
+    if (en.json.name && !en.json.done) waitOp(en.json.name, "https://serviceusage.googleapis.com");
+    console.log("Службы Google включены: " + services.length);
+    Utilities.sleep(5000);
+  } else console.warn("Не удалось включить службы: " + en.code + " " + JSON.stringify(en.json).slice(0, 300));
   var db = api("get", "https://firestore.googleapis.com/v1/projects/" + p + "/databases/(default)");
   if (db.code === 404) {
     var op = must(api("post", "https://firestore.googleapis.com/v1/projects/" + p + "/databases?databaseId=(default)", { locationId: "eur3", type: "FIRESTORE_NATIVE" }), "создание базы");
