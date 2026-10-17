@@ -409,3 +409,7 @@ details[open] summary{margin-bottom:8px}
 .iw{display:flex;flex-direction:column;gap:12px}
 .it .wd{margin-top:6px;min-height:30px;padding:4px 10px}
 .row-edit.trow.w{grid-template-columns:auto auto 1fr auto}
+/* iOS Safari: поля времени/даты имеют собственную ширину и вылезают за карточку */
+form.grid>*,.grid>*,label{min-width:0}
+input[type=time],input[type=date],input[type=datetime-local]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;min-height:44px;text-align:left}
+input[type=time]::-webkit-date-and-time-value,input[type=date]::-webkit-date-and-time-value{text-align:left}
