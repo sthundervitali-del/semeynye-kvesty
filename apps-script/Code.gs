@@ -262,8 +262,10 @@ function processSupport() {
       last = lastUser;
       var body = (th.length > 1 ? "Новое сообщение в запросе" : "Новый запрос") + " от " + (r.name || "") + " <" + (r.email || "") + ">, семья «" + (r.family || "") + "».\n\n" +
         last.text + "\n\n— — —\nОтветить можно в приложении: Настройки → Администрирование → Запросы пользователей.\n" + (prop("APP_URL", "") || "");
-      MailApp.sendEmail(to, "FamilyQuests: " + String(r.subject).slice(0, 120) + (th.length > 1 ? " (новое сообщение)" : ""), body, { name: "Family Quests" });
-      fsPatch("support/" + r.id, { mailedAt: Date.now() }, ["mailedAt"]); sent++;
+      try {
+        MailApp.sendEmail(to, "FamilyQuests: " + String(r.subject).slice(0, 120) + (th.length > 1 ? " (новое сообщение)" : ""), body, { name: "Family Quests" });
+        fsPatch("support/" + r.id, { mailedAt: Date.now() }, ["mailedAt"]); sent++;
+      } catch (e) { console.error("Письмо в поддержку не отправлено: " + e); sent = 99; } // без права на почту — не мешаем пушам
     }
     last = th[th.length - 1] || {};
     if (last.from === "support" && last.at > (r.notifiedAt || 0)) {
@@ -273,6 +275,9 @@ function processSupport() {
     }
   });
 }
+
+/** Проверка права на отправку писем: выберите checkMail и нажмите «Выполнить» (письмо не отправляется). */
+function checkMail() { console.log("Право на почту есть. Писем на сегодня осталось: " + MailApp.getRemainingDailyQuota() + ". Адрес поддержки: " + (prop("SUPPORT_EMAIL") ? "задан" : "НЕ задан")); }
 
 /* ---------- Firestore REST ---------- */
 function base() { return "https://firestore.googleapis.com/v1/projects/" + prop("PROJECT_ID") + "/databases/(default)/documents/"; }
