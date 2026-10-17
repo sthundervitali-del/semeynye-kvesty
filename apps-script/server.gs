@@ -2,7 +2,7 @@
    Каждые 5 минут: напоминания об обязательных делах, вечернее зачисление,
    уведомления родителям о заявках, подарки,
    ИИ-проверка фото через Gemini.
-   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL. */
+   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL, SUPPORT_EMAIL. */
 
 var P = PropertiesService.getScriptProperties();
 function prop(k, d) { return P.getProperty(k) || d; }
@@ -24,7 +24,24 @@ function tick() {
     fsList("families").forEach(function (f) {
       try { processFamily(f); } catch (e) { console.error("Семья " + f.id + ": " + (e && e.stack || e)); }
     });
+    try { processSupport(); } catch (e) { console.error("Поддержка: " + (e && e.stack || e)); }
   } finally { lock.releaseLock(); }
+}
+
+/* ---------- Поддержка ----------
+   Родители пишут запрос в приложении (коллекция support). Сервер пересылает его письмом
+   на адрес из свойства SUPPORT_EMAIL — пользователи этот адрес не видят. Ответ — на почту родителя (Reply-To). */
+function processSupport() {
+  var to = prop("SUPPORT_EMAIL"); if (!to) return;
+  var list = fsList("support").filter(function (r) { return !r.sentAt; }).slice(0, 10);
+  list.forEach(function (r) {
+    var body = "Тема: " + r.subject + "\n\n" + r.text + "\n\n— — —\nОт: " + (r.name || "") + " <" + (r.email || "") + ">\nСемья: " + (r.family || "") + " (" + r.fid + ")\n" +
+      "Язык: " + (r.lang || "ru") + " · версия приложения " + (r.app || "") + "\nОтправлено: " + new Date(r.at).toLocaleString("ru-RU", { timeZone: "Europe/Minsk" });
+    var opt = { name: "Family Quests", noReply: false };
+    if (r.email) opt.replyTo = r.email;
+    MailApp.sendEmail(to, "[Family Quests] " + String(r.subject).slice(0, 120), body, opt);
+    fsPatch("support/" + r.id, { sentAt: Date.now() }, ["sentAt"]);
+  });
 }
 
 /* ---------- Firestore REST ---------- */

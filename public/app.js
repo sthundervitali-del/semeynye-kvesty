@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.6.4", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.7.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -531,6 +531,15 @@ function parentTasks() {
   if (sel) out += selBar(sel);
   return out;
 }
+async function loadSupport() {
+  const box = document.getElementById("sp-list"); if (!box || !S.be?.mySupport) return;
+  try {
+    const list = await S.be.mySupport(S.user);
+    box.innerHTML = list.length ? `<div class="list">${list.slice(0, 20).map(r => `<div class="it"><span><b>${esc(r.subject)}</b><br><small>${fmtDate(r.at)}</small></span><span class="pill ${r.sentAt ? "ok" : "wait"}">${r.sentAt ? "отправлен" : "в очереди"}</span><span></span></div>`).join("")}</div>`
+      : `<div class="empty slim">Вы ещё не писали в поддержку.</div>`;
+  } catch (e) { box.innerHTML = `<div class="empty slim">Не удалось загрузить список.</div>`; }
+  I18N.apply(box);
+}
 function selBar(sel) { return `<div class="selbar"><button class="btn ghost" data-act="selMode">Отмена</button><button class="btn no" data-act="selDel" ${sel.size ? "" : "disabled"}>${ic("trash")} Удалить (${sel.size})</button></div><div class="selbar-pad"></div>`; }
 /* Свайп влево по делу — кнопка «Удалить», как в iPhone. */
 let swOpen = null;
@@ -695,6 +704,9 @@ function parentSettings() {
       ${row("notify", "bell", "green", "Уведомления", pushState())}
       ${row("lang", "globe", "blue", "Язык", I18N.lang() === "en" ? "English" : "Русский")}
     </div></div>
+    <div class="set-group"><h3>Помощь</h3><div class="set-list">
+      ${row("support", "inbox", "green", "Написать в поддержку", "Вопрос, ошибка или идея — ответим на вашу почту")}
+    </div></div>
     <div class="set-group"><h3>Аккаунт</h3><div class="set-list">
       ${S.families.length > 1 ? `<button class="set-row" data-act="switchFamily"><span class="tile c-gray">${ic("users")}</span><span class="t"><b>Сменить семью</b><small>У вас ${S.families.length} ${plural(S.families.length, "семья", "семьи", "семей")}</small></span>${ic("chev-r", "chev")}</button>` : ""}
       <button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти из аккаунта</b><small>${esc(S.user.email || "")}</small></span></button>
@@ -739,6 +751,15 @@ function settingsPage(p) {
       <p class="hint">На iPhone сначала добавьте приложение на экран «Домой»: «Поделиться» → «На экран „Домой“».</p>
       <div class="btnrow"><button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button><button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
   if (p === "lang") return head("Язык") + `<section class="card">${langOptions()}<p class="hint">Язык меняется только на этом устройстве. Уведомления на телефон тоже придут на выбранном языке.</p></section>`;
+  if (p === "support") {
+    setTimeout(loadSupport, 0);
+    return head("Поддержка") + `<section class="card"><form class="grid" data-form="support">
+      <label class="full">Тема<input id="sp-subj" name="subj" maxlength="120" required placeholder="Например: не приходят уведомления"></label>
+      <label class="full">Описание<textarea id="sp-text" name="text" maxlength="4000" required rows="6" placeholder="Опишите, что произошло: что вы делали, что ожидали и что получилось. Укажите телефон и браузер, если это ошибка."></textarea></label>
+      <div class="full"><button class="btn go">${ic("inbox")} Отправить</button></div></form>
+      <p class="hint">Ответ придёт на ${esc(S.user.email || "вашу почту")}. Вместе с запросом передаются название семьи и ваш адрес.</p></section>
+      <section class="card"><h2>${ic("history", "h")} Мои запросы</h2><div id="sp-list"><div class="empty slim">Загрузка…</div></div></section>`;
+  }
   if (p === "danger") return head("Удалить семью") + `<section class="card danger-card"><div class="state">${ic("trash", "h")} <b>Это действие нельзя отменить</b></div>
       <p>Будут удалены все дела, награды, баллы, история, фото и участники семьи «${esc(S.cfg.name || "")}». У второго родителя и детей семья тоже пропадёт.</p>
       <form class="grid" data-form="delFamily"><label class="full">Чтобы подтвердить, введите название семьи<input id="del-name" name="name" autocomplete="off" placeholder="${esc(S.cfg.name || "")}"></label>
@@ -1045,6 +1066,16 @@ document.addEventListener("submit", e => {
     S.be.setFamily({ kids }).then(() => toast("Сохранено")).catch(fail); return;
   }
   const saved = () => toast("Сохранено");
+  if (kind === "support") {
+    const subject = f.subj.value.trim().slice(0, 120), text = f.text.value.trim().slice(0, 4000);
+    if (!subject || !text) return toast("Заполните тему и описание");
+    const last = +lsGet("fq-sp-last") || 0; if (Date.now() - last < 60e3) return toast("Подождите минуту перед следующим запросом");
+    const btn = f.querySelector("button"); btn.disabled = true;
+    S.be.sendSupport(S.user, { subject, text, family: S.cfg?.name || "", lang: I18N.lang(), app: APP_VERSION })
+      .then(() => { lsSet("fq-sp-last", String(Date.now())); f.reset(); toast("Запрос отправлен в поддержку"); loadSupport(); })
+      .catch(fail).finally(() => { btn.disabled = false; });
+    return;
+  }
   if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00" } }).then(saved).catch(fail);
   if (kind === "set-cal") S.be.setFamily({ settings: { belarus: f.by.checked } }).then(saved).catch(fail);
   if (kind === "set-check") { const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14)); S.be.setFamily({ settings: { autoAI: f.ai.checked, photoDays: ph } }).then(saved).catch(fail); }

@@ -20,6 +20,18 @@ service cloud.firestore {
       allow delete: if signedIn() && isParent(resource.data.fid);
     }
 
+    // Запросы в поддержку: отправляет только родитель семьи от своего имени. Читает только автор.
+    // Письмо отправляет сервер-скрипт; адрес поддержки хранится в свойствах скрипта и пользователям не виден.
+    match /support/{id} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && isParent(request.resource.data.fid)
+        && request.resource.data.subject is string && request.resource.data.subject.size() > 0 && request.resource.data.subject.size() <= 120
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 4000
+        && !('sentAt' in request.resource.data);
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
     match /families/{fid} {
       allow read: if isMember(fid);
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;

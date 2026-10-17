@@ -192,6 +192,13 @@
     "Не получилось сохранить. Проверьте интернет и попробуйте ещё раз.": "Couldn't save. Check the internet and try again.",
     "Не получилось удалить. Проверьте интернет и попробуйте ещё раз.": "Couldn't delete. Check the internet and try again.",
     "Не удалось загрузить данные. Проверьте интернет.": "Couldn't load data. Check the internet.", "Нет прав на это действие.": "You don't have permission for this.",
+"Помощь": "Help", "Написать в поддержку": "Contact support", "Вопрос, ошибка или идея — ответим на вашу почту": "A question, bug or idea: we'll reply to your email",
+    "Поддержка": "Support", "Тема": "Subject", "Описание": "Description", "Например: не приходят уведомления": "For example: notifications don't arrive",
+    "Опишите, что произошло: что вы делали, что ожидали и что получилось. Укажите телефон и браузер, если это ошибка.": "Describe what happened: what you did, what you expected and what you got. Mention your phone and browser if it's a bug.",
+    "Отправить": "Send", "Мои запросы": "My requests", "отправлен": "sent", "в очереди": "queued", "Вы ещё не писали в поддержку.": "You haven't contacted support yet.",
+    "Не удалось загрузить список.": "Couldn't load the list.", "Заполните тему и описание": "Fill in the subject and description",
+    "Подождите минуту перед следующим запросом": "Wait a minute before sending another request", "Запрос отправлен в поддержку": "Request sent to support",
+    "Вместе с запросом передаются название семьи и ваш адрес.": "The family name and your address are sent with the request.", "вашу почту": "your email",
     // уровни
     "Новичок": "Rookie", "Помощник": "Helper", "Умелец": "Handy", "Мастер дома": "House master", "Герой семьи": "Family hero", "Легенда": "Legend", "Великий магистр": "Grand master",
     // статусы
@@ -282,6 +289,7 @@
     [/^Откройте ссылку на устройстве (второго родителя|ребёнка) и войдите через Google\. Или войдите и введите код вручную\. Код действует 7 дней\.$/, function (w) { return "Open the link on " + (w === "ребёнка" ? "the child's" : "the second parent's") + " device and sign in with Google. Or sign in and enter the code by hand. The code is valid for 7 days."; }],
     [/^Зачисление в (\d{1,2}:\d{2}), трата после воскресенья$/, function (tm) { return "Credited at " + tm + ", spend after Sunday"; }],
     [/^(Решает родитель|Автоприём по ИИ) · фото хранятся (.+)$/, function (a, b) { return t(a) + " · photos kept " + t(b); }],
+    [/^Ответ придёт на (.+)\.$/, function (x) { return "The reply will come to " + t(x) + "."; }],
     [/^Family Quests · версия (\S+) от (\S+)$/, function (v, d) { return "Family Quests · version " + v + " of " + d; }],
     [/^Family Quests · версия (\S+)$/, function (v) { return "Family Quests · version " + v; }],
     [/^Сегодня выходной: (.+)$/, function (x) { return "Day off today: " + t(x); }],

@@ -17,7 +17,7 @@ export async function firebaseBackend() {
   // Вход сохраняется на устройстве: после закрытия приложения пароль не нужен, пока не нажат «Выйти».
   const auth = A.initializeAuth(app, { persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence], popupRedirectResolver: A.browserPopupRedirectResolver });
   const db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
-  const { doc, collection, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, arrayUnion, arrayRemove, writeBatch } = F;
+  const { doc, collection, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, arrayUnion, arrayRemove, writeBatch, query, where } = F;
   let fid = null, me = null;
   const fam = (...p) => doc(db, "families", fid, ...p);
 
@@ -75,6 +75,8 @@ export async function firebaseBackend() {
     async oldPhotos(before) { const s = await getDocs(collection(db, "families", fid, "photos")); return s.docs.filter(d => (d.data().at || 0) < before).map(d => d.id); },
     updateMember: (u, patch) => setDoc(fam("members", u), patch, { merge: true }),
     removeMember: u => deleteDoc(fam("members", u)),
+    sendSupport: (user, req) => { const id = uid("s"); return setDoc(doc(db, "support", id), { ...req, id, uid: user.uid, email: user.email || "", name: user.displayName || "", fid, at: Date.now() }); },
+    mySupport: async user => (await getDocs(query(collection(db, "support"), where("uid", "==", user.uid)))).docs.map(d => d.data()).sort((a, b) => b.at - a.at),
     /** Полное удаление семьи: все записи, фото, участники и сама семья. */
     async deleteFamily(user) {
       const wipe = async refs => {
@@ -159,6 +161,8 @@ export function demoBackend(seedFn) {
     putPhoto: async (id, d) => { store.photos[id] = d; }, getPhoto: async id => store.photos[id]?.data || null, delPhoto: async () => {}, oldPhotos: async () => [],
     updateMember: async (u, p) => { store.members[u] = deepMerge(store.members[u] || {}, p); later(); },
     removeMember: async u => { delete store.members[u]; later(); },
+    sendSupport: async (user, req) => { (store.support = store.support || []).unshift({ ...req, id: uid("s"), uid: user.uid, at: Date.now() }); },
+    mySupport: async () => (store.support || []).slice(),
     createInvite: async () => code8(),
     deleteFamily: async () => { throw new Error("В демо-режиме семью удалить нельзя."); },
     enablePush: async () => { throw new Error("В демо-режиме уведомления не подключаются."); }, resumePush: async () => {},
