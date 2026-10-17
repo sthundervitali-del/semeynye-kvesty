@@ -29,24 +29,41 @@
     r = pattern(s); if (r != null) return r;
     return null;
   }
+  var WORDS = window.FQ_WORDS || {}, WKEYS = null;
+  function words(s) { // составные подписи: заменяем известные фрагменты, если после этого не осталось русских букв
+    if (!WKEYS) WKEYS = Object.keys(WORDS).sort(function (a, b) { return b.length - a.length; });
+    var out = s;
+    for (var i = 0; i < WKEYS.length; i++) {
+      var k = WKEYS[i]; if (out.indexOf(k) < 0) continue;
+      out = out.replace(new RegExp("(^|[^А-Яа-яЁё])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=$|[^А-Яа-яЁё])", "g"), function (m, p) { return p + WORDS[k]; });
+    }
+    return CYR.test(out) ? null : out;
+  }
+  function core(c) {
+    var out = one(c);
+    if (out == null && c.indexOf(" · ") >= 0) {
+      var parts = c.split(" · "), ok = true;
+      out = parts.map(function (p) { var x = one(p); if (x == null) x = words(p); if (x == null) { if (CYR.test(p)) ok = false; return p; } return x; }).join(" · ");
+      if (!ok) out = null;
+    }
+    if (out == null) out = words(c);
+    return out;
+  }
   function tr(str) {
     if (cur !== "en" || str == null) return str;
     str = String(str);
     if (!CYR.test(str)) return str;
     if (cache[str] != null) return cache[str];
-    var lead = str.match(/^\s*/)[0], trail = str.match(/\s*$/)[0];
-    var core = str.trim(), out = one(core);
-    if (out == null && core.indexOf(" · ") >= 0) {
-      var parts = core.split(" · "), ok = true;
-      out = parts.map(function (p) { var t = one(p); if (t == null) { if (CYR.test(p)) ok = false; return p; } return t; }).join(" · ");
-      if (!ok && out === core) out = null;
-    }
+    // снимаем пробелы, «·» и знаки препинания по краям
+    var m = /^([\s·]*)([\s\S]*?)([\s·:.,!?…]*)$/.exec(str), lead = m[1], c = m[2], trail = m[3];
+    var out = core(c);
+    if (out == null && trail) { out = core(c + trail.trim()); if (out != null) trail = trail.replace(/\S+/, "").replace(/^\s*/, trail.match(/^\s*/)[0]); }
     if (out == null) {
-      // концевые знаки препинания: «Текст:» / «Текст.»
-      var mm = /^(.*?)([:.,!?…]+)$/.exec(core);
-      if (mm && mm[1]) { var t2 = one(mm[1]); if (t2 != null) out = t2 + mm[2]; }
+      // повторная попытка без хвостовых знаков внутри c
+      var mm = /^(.*?)([:.,!?…]+)$/.exec(c);
+      if (mm && mm[1]) { var t2 = core(mm[1]); if (t2 != null) out = t2 + mm[2]; }
     }
-    if (out == null) { out = core; if (window.FQ_I18N_DEBUG) (window.FQ_MISSES = window.FQ_MISSES || {})[core] = 1; }
+    if (out == null) { out = c; if (window.FQ_I18N_DEBUG) (window.FQ_MISSES = window.FQ_MISSES || {})[c] = 1; }
     return (cache[str] = lead + out + trail);
   }
   var ATTRS = ["placeholder", "aria-label", "title", "alt"];

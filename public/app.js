@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.5.0", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.5.1", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -658,7 +658,7 @@ function parentRewards() {
   if (wsel) out = `<section class="card"><div class="card-head"><h2>${ic("check-square", "h")} Выбор наград</h2><span class="hint">выбрано ${wsel.size}</span></div>
       <p class="hint">Нажимайте на награды, которые нужно удалить. Кнопка «Все» выбирает весь магазин.</p></section>`;
   out += `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Магазин желаний</h2>${wsel ? (wishes.length ? `<button class="btn sm ghost" data-act="selAllW">${wishes.every(w => wsel.has(w.id)) ? "Снять" : "Все"}</button>` : "") : ""}</div>
-    ${wsel ? "" : `<div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}</div>
+    ${wsel ? "" : `<div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}${wishes.length > 1 ? `<button class="btn ghost" data-act="sortWishes">${ic("coins")} По цене</button>` : ""}</div>
     ${wishes.length > 1 ? `<p class="hint">Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке награды увидят дети. Удалить награду — смахните её влево.</p>` : ""}`}
     ${wishes.length ? `<div class="sortable" data-kind="wishes">${wishes.map(wrow).join("")}</div>` : `<div class="empty">${ic("gift")}Магазин пуст. Добавьте награды из шаблонов или свою.</div>`}</section>`;
   if (wsel) out += selBar(wsel);
@@ -953,6 +953,14 @@ document.addEventListener("click", e => {
     }, true); return; }
   if (act === "selMode") { if (S.sel || !id) { S.sel = null; S.selKind = null; } else { S.sel = new Set(); S.selKind = id; } render(); return; }
   if (act === "selTask") { if (!S.sel) return; S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); render(); return; }
+  if (act === "sortWishes") { const list = F.live(S.cfg.wishes); if (list.length < 2) return;
+    ask("Отсортировать награды по цене — от дешёвых к дорогим?", "Отсортировать", () => {
+      const sorted = list.slice().sort((a, b) => a.cost - b.cost || (a.o || 0) - (b.o || 0));
+      let os = list.map(w => w.o || 0).sort((a, b) => a - b); if (new Set(os).size !== os.length) os = sorted.map((_, i) => (os[0] || Date.now()) + i);
+      const map = {}; sorted.forEach((w, i) => { if ((w.o || 0) !== os[i]) map[w.id] = { o: os[i] }; });
+      if (!Object.keys(map).length) return toast("Награды отсортированы по цене");
+      S.be.setFamily({ wishes: map }).then(() => toast("Награды отсортированы по цене")).catch(fail);
+    }); return; }
   if (act === "selAllW") { if (!S.sel) return; const list = F.live(S.cfg.wishes); const all = list.every(w => S.sel.has(w.id)); list.forEach(w => all ? S.sel.delete(w.id) : S.sel.add(w.id)); render(); return; }
   if (act === "selAll") { if (!S.sel) return; const list = F.live(S.cfg.tasks).filter(t => F.category(t) === el.dataset.cat); const all = list.every(t => S.sel.has(t.id)); list.forEach(t => all ? S.sel.delete(t.id) : S.sel.add(t.id)); render(); return; }
   if (act === "selDel") { const ids = [...(S.sel || [])]; if (!ids.length) return;
