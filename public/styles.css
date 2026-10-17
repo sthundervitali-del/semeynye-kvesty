@@ -368,3 +368,34 @@ details[open] summary{margin-bottom:8px}
 
 .app-ic{display:block;flex:none;border-radius:24%;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .version .app-ic{display:inline-block;vertical-align:-5px;margin-right:6px;box-shadow:none}
+
+/* список дел: перетаскивание и выбор */
+.row-edit.trow{grid-template-columns:auto auto 1fr auto auto;gap:10px}
+.row-edit.trow.pick{grid-template-columns:auto auto 1fr;cursor:pointer;margin:0 -10px;padding:10px;border-radius:14px;border-bottom-color:transparent;transition:background .15s}
+.row-edit.trow.pick.on{background:color-mix(in srgb,var(--gold) 12%,transparent)}
+.row-edit.trow.pick.off .t,.row-edit.trow.pick.off .ic{opacity:.6}
+.pbox{width:24px;height:24px;border-radius:8px;border:2px solid var(--line-2,var(--muted));display:grid;place-items:center;color:transparent;transition:all .15s}
+.pbox .i{display:block;width:16px;height:16px;margin:0;stroke-width:2.8;vertical-align:0}
+.pick.on .pbox{background:var(--gold);border-color:var(--gold);color:#1A1200}
+.grip{width:28px;height:40px;margin:-6px -4px -6px -8px;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:grab;touch-action:none;border-radius:10px;-webkit-user-select:none;user-select:none}
+.grip:hover{color:var(--text);background:var(--surface-2,rgba(255,255,255,.04))}
+.grip:active{cursor:grabbing}
+.sortable{position:relative}
+.sortable.sorting{-webkit-user-select:none;user-select:none}
+.sortable.sorting .row-edit:not(.dragging){transition:transform .15s}
+.srow.dragging{position:relative;z-index:5}
+.srow.dragging .row-edit{background:var(--surface-2);box-shadow:0 12px 30px rgba(0,0,0,.45),0 0 0 1px var(--gold);border-radius:14px}
+.row-edit.dragging{position:relative;z-index:5;background:var(--surface-2,#20264A);border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.45),0 0 0 1px var(--gold);margin:0 -10px;padding-left:10px;padding-right:10px;border-bottom-color:transparent}
+.selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:45;display:flex;gap:10px;padding:10px;border-radius:18px;background:color-mix(in srgb,var(--surface) 92%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.45);width:min(520px,calc(100% - 24px))}
+.selbar .btn{flex:1}
+.selbar-pad{height:80px}
+@media (min-width:900px){.selbar{bottom:20px}}
+
+.srow{position:relative;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow>.row-edit{position:relative;z-index:1;background:var(--surface);border-bottom:0;margin:0 -10px;padding:10px;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1);touch-action:pan-y}
+.swipe-del{position:absolute;top:4px;bottom:4px;right:-6px;width:96px;border:0;border-radius:14px;background:var(--bad);color:#fff;font-weight:700;font-size:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;opacity:0;transition:opacity .15s}
+.srow.open .swipe-del,.srow:has(>.row-edit[style*="translateX"]) .swipe-del{opacity:1}
+.swipe-del .i{width:20px;height:20px}
+.sortable.sorting .srow{transition:none}
+.sortable{overflow-x:clip;margin:0 -10px;padding:0 10px}
