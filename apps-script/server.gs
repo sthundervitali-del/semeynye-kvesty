@@ -2,7 +2,7 @@
    Каждые 5 минут: напоминания об обязательных делах, вечернее зачисление,
    уведомления родителям о заявках, подарки,
    ИИ-проверка фото через Gemini.
-   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL, SUPPORT_EMAIL, ADMIN_UID. */
+   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL, SUPPORT_EMAIL, ADMIN_EMAIL (или ADMIN_UID). */
 
 var P = PropertiesService.getScriptProperties();
 function prop(k, d) { return P.getProperty(k) || d; }
@@ -35,6 +35,13 @@ function tick() {
    — присылает родителю пуш, когда поддержка ответила. */
 function processSupport() {
   var adminUid = prop("ADMIN_UID");
+  if (!adminUid && prop("ADMIN_EMAIL")) { // находим аккаунт администратора по почте среди родителей
+    var want = prop("ADMIN_EMAIL").toLowerCase().trim();
+    fsList("families").some(function (f) {
+      return fsList("families/" + f.id + "/members").some(function (m) { if (String(m.email || "").toLowerCase() === want) { adminUid = m.id; return true; } });
+    });
+    if (adminUid) P.setProperty("ADMIN_UID", adminUid);
+  }
   if (adminUid && prop("ADMIN_DONE") !== adminUid) { if (fsPatch("admins/" + adminUid, { at: Date.now() }, ["at"])) P.setProperty("ADMIN_DONE", adminUid); }
   var to = prop("SUPPORT_EMAIL"), sent = 0;
   fsList("support").forEach(function (r) {
