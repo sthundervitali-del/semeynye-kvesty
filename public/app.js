@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.4.1", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.5.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -273,8 +273,8 @@ function onboardingScreen() {
         <label>Ребёнок 3<input id="c-k3" name="k3" placeholder="Имя (необязательно)"></label><label>Возраст<input id="c-a3" name="a3" type="number" inputmode="numeric" min="3" max="18"></label>
         <div class="full"><button class="btn dark big">Создать семью</button></div></form></section></div>`;
 }
-const noAccessScreen = () => `<div class="login"><div class="box">${coin(56)}<h1>Нет доступа</h1><p class="hint">Семья удалена, или вас из неё удалили.</p><button class="btn dark" data-act="leaveFamily">Выбрать другую семью</button><button class="btn ghost" data-act="signOut">Выйти</button></div></div>`;
-const errorScreen = () => `<div class="login"><div class="box"><h1>Приложение не настроено</h1><p class="hint">${esc(S.error)}</p><a class="btn dark" href="?demo">Открыть демо-режим</a></div></div>`;
+const noAccessScreen = () => `<div class="login"><div class="box"><img class="logo" src="${window.FQ_ICON || "/icon.svg"}" alt=""><h1>Вас нет в этой семье</h1><p class="hint">Похоже, родители удалили ваш профиль или всю семью. Попросите их прислать новое приглашение и введите код.</p><button class="btn go big" data-act="leaveFamily">Ввести код приглашения</button><button class="btn ghost" data-act="signOut">Выйти из аккаунта</button></div></div>`;
+const errorScreen = () => `<div class="login"><div class="box"><img class="logo" src="${window.FQ_ICON || "/icon.svg"}" alt=""><h1>Приложение не настроено</h1><p class="hint">${esc(S.error)}</p><a class="btn dark" href="?demo">Открыть демо-режим</a></div></div>`;
 
 /* ====================== РЕБЁНОК ====================== */
 function hero(k) {
@@ -297,7 +297,7 @@ function taskRow(t, k, s, st) {
   if (st.free && dl && dl.phase === "closed") side = `<span class="pill no">Время вышло</span>`;
   else if (st.free && latePts != null) side = `<span class="pts num">+${latePts}</span><button class="btn" data-act="done" data-id="${t.id}">Сделал с опозданием</button>`;
   else if (st.free) side = `<span class="pts num">+${t.pts * x}</span>${st.pending ? `<span class="pill wait">проверяется: ${st.pending}</span>` : ""}<button class="btn go" data-act="done" data-id="${t.id}">Готово!</button>`;
-  else if (st.status === "pending") side = `<span class="pts num">+${t.pts * x}</span><span class="pill wait">Проверяется…</span>`;
+  else if (st.status === "pending") side = `<span class="pts num">+${t.pts * x}</span><span class="pill wait">Проверяется…</span>${canWithdraw(st.entry) ? `<button class="btn sm ghost" data-act="withdraw" data-id="${st.entry.id}">Отменить</button>` : ""}`;
   else if (st.status === "redo") side = `<span class="pts num">+${t.pts * x}</span><button class="btn go" data-act="done" data-id="${t.id}" data-entry="${st.entry.id}">Исправил!</button>`;
   else side = `<span class="pill ok">${ic("check", "xs")} Принято</span>`;
   const sub = [];
@@ -338,7 +338,7 @@ function kidToday(k) {
 function kidShop(k) {
   const a = acct(k.id);
   let out = `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Мои баллы</h2></div><div class="kids-sum"><div class="ks"><span>Можно потратить</span><span class="v num">${a.available}</span></div><div class="ks"><span>Копится за неделю</span><span class="v num">${a.locked}</span><small class="hint">откроется ${sundayLabel()}</small></div></div></section>`;
-  const wishes = F.live(S.cfg.wishes).filter(w => F.forKid(w, k.id)).sort((x, y) => x.cost - y.cost);
+  const wishes = F.live(S.cfg.wishes).filter(w => F.forKid(w, k.id));
   out += `<section class="card"><div class="card-head"><h2>${ic("gift", "h")} Магазин желаний</h2><span class="hint">Обменяй баллы на награду</span></div>`;
   out += wishes.length ? `<div class="shop">${wishes.map(w => { const can = a.available >= w.cost, p = Math.max(0, Math.min(100, Math.round(a.available / w.cost * 100)));
     return `<div class="wish"><b>${esc(w.title)}</b><div class="cost num">${coin(16)} ${w.cost}</div>${can ? "" : `<div class="mini"><i style="width:${p}%"></i></div><div class="need num">Ещё ${ptsW(w.cost - a.available)}</div>`}
@@ -355,7 +355,7 @@ function histRow(e) {
   const label = e.type === "game" ? `Игровое время +${e.minutes} мин` : e.type === "wish" ? `${ic("gift", "xs gold")} ${esc(e.title)}` : esc(e.title);
   const pill = e.status === "pending" ? `<span class="pill wait">${e.type === "wish" ? "ждёт" : "проверяется"}</span>` : e.status === "redo" ? `<span class="pill wait">доработка</span>` : e.status === "ok" ? `<span class="pill ok">${e.type === "task" ? "принято" : e.type === "wish" ? "одобрено" : "куплено"}</span>` : `<span class="pill no">${e.type === "wish" ? "отклонено" : "не засчитано"}</span>`;
   const note = e.dec?.note && e.status !== "pending" ? `<br><small>${e.type === "wish" ? "Родители" : "Проверка"}: ${esc(e.dec.note)}</small>` : "";
-  return `<div class="it"><span>${label}<br><small>${fmtDate(e.at)}</small>${note}</span>${pill}<span class="delta num ${e.status === "no" || e.status === "redo" || e.status === "pending" ? "" : minus ? "minus" : "plus"}">${sign}</span></div>`;
+  return `<div class="it"><span>${label}<br><small>${fmtDate(e.at)}</small>${note}${canWithdraw(e) ? `<br><button class="btn sm ghost wd" data-act="withdraw" data-id="${e.id}">Отменить</button>` : ""}</span>${pill}<span class="delta num ${e.status === "no" || e.status === "redo" || e.status === "pending" ? "" : minus ? "minus" : "plus"}">${sign}</span></div>`;
 }
 function kidHistory(k) {
   const items = [...S.data.entries.filter(e => e.kid === k.id), ...S.data.gifts.filter(g => g.kid === k.id)].sort((a, b) => b.at - a.at).slice(0, 60);
@@ -507,7 +507,7 @@ function parentTasks() {
       <p class="hint">Нажимайте на дела, которые нужно удалить. В каждом разделе есть кнопка «Все».</p></section>`
     : `<section class="card"><div class="card-head"><h2>${ic("checklist", "h")} Дела</h2><span class="hint">${all.length ? `включено ${on} из ${all.length}` : "список пуст"}</span></div>
     <div class="btnrow"><button class="btn go" data-act="tplTasks">${ic("layers")} Из шаблонов</button><button class="btn" data-act="taskForm" data-cat="mb">${ic("plus")} Своё дело</button>${all.length ? `<button class="btn ghost" data-act="selMode" data-id="tasks">${ic("check-square")} Выбрать</button>` : ""}${on ? `<button class="btn ghost" data-act="allOff">Выключить все</button>` : ""}</div>
-    <p class="hint">Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке дела увидят дети. Выключенные дела остаются на своём месте, дети их не видят, напоминания по ним не приходят.</p></section>`;
+    <p class="hint">Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке дела увидят дети. Удалить дело — смахните его влево. Выключенные дела остаются на своём месте, дети их не видят, напоминания по ним не приходят.</p></section>`;
   if (!all.length) return out + `<div class="empty big">${ic("checklist")}<b>Список дел пуст</b><span>Выберите готовые дела из шаблонов или создайте свои.</span><button class="btn go" data-act="tplTasks">${ic("layers")} Открыть шаблоны</button></div>`;
   const hints = { mb: "Привязаны к дням. По ним приходят напоминания, пропуски видны в календаре.", ob: "Привязаны к дням, но по желанию.", mu: "Нужно сделать N раз за неделю в любой день.", ou: "Можно делать когда угодно ради баллов." };
   out += ["mb", "mu", "ob", "ou"].map(c => {
@@ -596,11 +596,12 @@ document.addEventListener("pointerdown", e => {
     const ids = [...list.children].map(r => r.dataset.id);
     S.drag = false;
     if (ids.join() !== before.join()) {
-      let os = ids.map(id => S.cfg.tasks[id]?.o || 0).sort((a, b) => a - b);
+      const coll = list.dataset.kind === "wishes" ? "wishes" : "tasks";
+      let os = ids.map(id => S.cfg[coll][id]?.o || 0).sort((a, b) => a - b);
       if (new Set(os).size !== os.length) os = ids.map((_, i) => (os[0] || Date.now()) + i);
       const map = {};
-      ids.forEach((id, i) => { if ((S.cfg.tasks[id]?.o || 0) !== os[i]) { map[id] = { o: os[i] }; S.cfg.tasks[id].o = os[i]; } });
-      if (Object.keys(map).length) S.be.setFamily({ tasks: map }).catch(fail);
+      ids.forEach((id, i) => { if ((S.cfg[coll][id]?.o || 0) !== os[i]) { map[id] = { o: os[i] }; S.cfg[coll][id].o = os[i]; } });
+      if (Object.keys(map).length) S.be.setFamily({ [coll]: map }).catch(fail);
     }
     if (renderPending) rerender();
   };
@@ -646,18 +647,20 @@ function parentRewards() {
     <div><button class="btn go">Подарить</button></div></form>
     <details><summary>Бонус или списание без поздравления</summary><form class="grid" data-form="bonus"><label>Кому<select id="b-kid" name="kid">${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("")}</select></label>
     <label>Баллы (минус — списать)<input id="b-pts" name="pts" type="number" inputmode="numeric" value="-10" required></label><label class="full">Причина<input id="b-why" name="why" required></label><div><button class="btn dark">Применить</button></div></form></details></section>`;
-  const wishes = F.live(S.cfg.wishes).sort((a, b) => a.cost - b.cost);
+  const wishes = F.live(S.cfg.wishes);
   const wsel = S.selKind === "wishes" ? S.sel : null;
   if (wsel) for (const id of [...wsel]) if (!S.cfg.wishes[id] || S.cfg.wishes[id].del) wsel.delete(id);
   const wrow = w => {
     const icon = `<span class="ic cat-gold">${ic("gift")}</span>`, text = `<div class="t"><b>${esc(w.title)}</b><small class="num">${coin(13)} ${w.cost} · ${w.who === "all" ? "всем" : esc(kidById(w.who)?.name || "")}</small></div>`;
     if (wsel) { const on = wsel.has(w.id); return `<div class="row-edit trow pick ${on ? "on" : ""}" data-act="selTask" data-id="${w.id}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="pbox">${ic("check")}</span>${icon}${text}</div>`; }
-    return `<div class="srow" data-id="${w.id}"><button class="swipe-del" data-act="swipeDel" data-kind="wishes" data-id="${w.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit w">${icon}${text}<button class="btn sm ghost icon" data-act="wishForm" data-id="${w.id}" aria-label="Изменить: ${esc(w.title)}">${ic("pencil")}</button></div></div>`;
+    return `<div class="srow" data-id="${w.id}"><button class="swipe-del" data-act="swipeDel" data-kind="wishes" data-id="${w.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow w">${wishes.length > 1 ? `<button class="grip" data-drag aria-label="Перетащить: ${esc(w.title)}">${ic("grip")}</button>` : "<span></span>"}${icon}${text}<button class="btn sm ghost icon" data-act="wishForm" data-id="${w.id}" aria-label="Изменить: ${esc(w.title)}">${ic("pencil")}</button></div></div>`;
   };
-  out += `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Магазин желаний</h2>${wsel ? `<span class="hint">выбрано ${wsel.size}</span>` : ""}</div>
-    ${wsel ? `<div class="btnrow"><button class="btn ghost" data-act="selAllW">${wishes.length && wishes.every(w => wsel.has(w.id)) ? "Снять все" : "Выбрать все"}</button></div>`
-      : `<div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}</div>`}
-    ${wishes.length ? `<div class="sortable">${wishes.map(wrow).join("")}</div>` : `<div class="empty">${ic("gift")}Магазин пуст. Добавьте награды из шаблонов или свою.</div>`}</section>`;
+  if (wsel) out = `<section class="card"><div class="card-head"><h2>${ic("check-square", "h")} Выбор наград</h2><span class="hint">выбрано ${wsel.size}</span></div>
+      <p class="hint">Нажимайте на награды, которые нужно удалить. Кнопка «Все» выбирает весь магазин.</p></section>`;
+  out += `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Магазин желаний</h2>${wsel ? (wishes.length ? `<button class="btn sm ghost" data-act="selAllW">${wishes.every(w => wsel.has(w.id)) ? "Снять" : "Все"}</button>` : "") : ""}</div>
+    ${wsel ? "" : `<div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}</div>
+    ${wishes.length > 1 ? `<p class="hint">Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке награды увидят дети. Удалить награду — смахните её влево.</p>` : ""}`}
+    ${wishes.length ? `<div class="sortable" data-kind="wishes">${wishes.map(wrow).join("")}</div>` : `<div class="empty">${ic("gift")}Магазин пуст. Добавьте награды из шаблонов или свою.</div>`}</section>`;
   if (wsel) out += selBar(wsel);
   return out;
 }
@@ -872,6 +875,8 @@ async function shrink(file, max, q) {
   while (data.length > 600000 && q > .35) { q -= .1; data = c.toDataURL("image/jpeg", q); }
   return data;
 }
+// Ребёнок может забрать заявку, пока её не проверили (кроме повторной отправки после доработки).
+const canWithdraw = e => !!e && e.status === "pending" && !e.dec?.status && !e.resent && !isParent() && e.kid === viewingKid();
 function submitTask(t, entryId) {
   const kid = viewingKid(), s = today();
   const old = entryId && S.data.entries.find(e => e.id === entryId);
@@ -966,6 +971,11 @@ document.addEventListener("click", e => {
   if (act === "kidMenu") { modal(`<section class="profile"><span class="avatar lg" style="background:${kidColor(kidById(viewingKid()))}">${esc((S.user.displayName || "?")[0].toUpperCase())}</span><span class="t"><b>${esc(S.user.displayName || "")}</b><small>${esc(S.user.email || "")}</small></span></section>
     <div class="set-list"><button class="set-row" data-act="push"><span class="tile c-green">${ic("bell")}</span><span class="t"><b>Уведомления</b><small>${pushState()}</small></span></button><button class="set-row" data-act="setLang" data-id="${I18N.lang() === "en" ? "ru" : "en"}"><span class="tile c-blue">${ic("globe")}</span><span class="t"><b>Язык</b><small data-noi18n>${I18N.lang() === "en" ? "English → Русский" : "Русский → English"}</small></span></button><button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти</b><small>${esc(S.user.email || "")}</small></span></button></div>
     <p class="version">${appIcon(20)} Family Quests · версия ${APP_VERSION}</p>`); return; }
+  if (act === "withdraw") { const en = S.data.entries.find(x => x.id === id); if (!canWithdraw(en)) return;
+    ask(en.type === "wish" ? `Отменить заявку на «${en.title}»?` : `Отменить «${en.title}»? Дело снова станет невыполненным.`, "Отменить", () => {
+      const { status, dec, value, doc, ...raw } = en;
+      S.be.putEntry(en.kid, doc.slice(en.kid.length + 1), { ...raw, withdrawn: true, withdrawnAt: Date.now() }).then(() => toast("Заявка отменена")).catch(fail);
+    }); return; }
   if (act === "done") { const t = S.cfg.tasks[id]; if (t) submitTask(t, el.dataset.entry); return; }
   if (act === "wish") {
     const w = S.cfg.wishes[id], kid = viewingKid(); if (!w) return;
@@ -1090,3 +1100,18 @@ async function boot2(chooser) {
   });
   if ("serviceWorker" in navigator && !demo) navigator.serviceWorker.register("/firebase-messaging-sw.js").catch(() => {});
 })();
+
+/* Автообновление: если на сайте вышла новая версия, тихо перезагружаемся. */
+async function checkUpdate() {
+  if (location.protocol === "file:" || S.be?.demo) return;
+  try {
+    const html = await fetch("/index.html?u=" + Date.now(), { cache: "no-store" }).then(r => r.text());
+    const v = (/name="app-version" content="([^"]+)"/.exec(html) || [])[1];
+    if (!v || v === APP_VERSION) return;
+    const key = "fq-upd-" + v; if (sessionStorage.getItem(key)) return; // не зацикливаемся
+    if (document.querySelector(".scrim") || (document.activeElement && document.activeElement.matches("input,textarea,select"))) return;
+    sessionStorage.setItem(key, "1"); location.reload();
+  } catch (_) {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
+setTimeout(checkUpdate, 4000);

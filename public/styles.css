@@ -407,3 +407,5 @@ details[open] summary{margin-bottom:8px}
 .srow>.row-edit{margin:0;padding:10px 0}
 .srow .swipe-del{right:0}
 .iw{display:flex;flex-direction:column;gap:12px}
+.it .wd{margin-top:6px;min-height:30px;padding:4px 10px}
+.row-edit.trow.w{grid-template-columns:auto auto 1fr auto}

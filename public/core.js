@@ -99,6 +99,7 @@ var FQ = (function () {
       var e = doc.e || {};
       for (var k in e) {
         var x = e[k]; if (!x || !x.id) continue;
+        if (x.withdrawn) continue; // ребёнок отменил заявку
         var dec = (p.d || {})[x.id] || null;
         var status;
         if (x.type === "game") status = x.cancelled ? "no" : "ok";
@@ -152,7 +153,7 @@ var FQ = (function () {
       if (redoW) return { free: false, status: "redo", entry: redoW, count: rel.length, need: need };
       var okN = rel.filter(function (e) { return e.status === "ok"; }).length, pend = rel.filter(function (e) { return e.status === "pending"; }).length;
       if (rel.length < need) return { free: true, count: okN, pending: pend, need: need };
-      return { free: false, status: pend ? "pending" : "ok", count: okN, need: need };
+      return { free: false, status: pend ? "pending" : "ok", count: okN, need: need, entry: rel.filter(function (e) { return e.status === "pending"; }).slice(-1)[0] };
     }
     else if (freq === "once") rel = mine;
     else { // many
@@ -163,7 +164,8 @@ var FQ = (function () {
     if (!rel.length) return { free: true };
     var redo = rel.filter(function (e) { return e.status === "redo"; })[0];
     if (redo) return { free: false, status: "redo", entry: redo };
-    return { free: false, status: rel.some(function (e) { return e.status === "pending"; }) ? "pending" : "ok" };
+    var pe = rel.filter(function (e) { return e.status === "pending"; }).slice(-1)[0];
+    return { free: false, status: pe ? "pending" : "ok", entry: pe };
   }
 
   /* Сводка дня для календаря. */
