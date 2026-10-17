@@ -91,7 +91,7 @@
     "Двойные баллы в этот день:": "Double points on this day:", "Нет дел на этот день.": "No tasks on this day.",
     "Дел по расписанию нет.": "No scheduled tasks.", "В этот день ничего не отмечено.": "Nothing was marked on this day.",
     "обязательно": "required", "запланировано": "planned", "по желанию": "optional", "обязательное дело": "required task",
-    "Засчитать": "Credit", "День сделан выходным": "Made a day off", "День сделан рабочим": "Made a working day", "День как в календаре": "Day reset to calendar",
+    "Засчитать": "Credit", "Прошедший день менять нельзя": "Past days can't be changed", "День уже прошёл — его тип и двойные баллы менять нельзя, чтобы не изменились начисленные баллы и пропуски. Пропущенное дело можно засчитать кнопкой «Засчитать».": "This day is over: its type and double points can't be changed, so earned points and missed tasks stay the same. A missed task can still be credited with the Credit button.", "День сделан выходным": "Made a day off", "День сделан рабочим": "Made a working day", "День как в календаре": "Day reset to calendar",
     "Двойные баллы сняты": "Double points removed", "В этот день баллы ×2": "Points ×2 on this day",
     "Добавьте детей в «Настройки → Дети» — здесь появятся их баллы и пропуски.": "Add children in Settings → Children, and their points and missed tasks will appear here.",
     "Выходной (решение родителей)": "Day off (parents' decision)", "Рабочий день (решение родителей)": "Working day (parents' decision)",

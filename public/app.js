@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.6.0", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.6.1", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -434,7 +434,8 @@ function dayPanel(kid, s, parentMode) {
   if (parentMode) {
     const ov = S.cfg.days?.[s] || {};
     const tasks = F.live(S.cfg.tasks).filter(t => t.active !== false && F.forKid(t, kid) && (!t.bound || F.applies(t, s, S.cfg)));
-    out += `<h3>Настроить день (для всех детей)</h3>
+    if (s < t0) out += `<h3>Настроить день (для всех детей)</h3><p class="hint">${ic("clock", "xs")} День уже прошёл — его тип и двойные баллы менять нельзя, чтобы не изменились начисленные баллы и пропуски. Пропущенное дело можно засчитать кнопкой «Засчитать».</p>`;
+    else out += `<h3>Настроить день (для всех детей)</h3>
       <div class="seg" role="group" aria-label="Тип дня">${[["auto", "По календарю"], ["off", "Выходной"], ["work", "Рабочий"]].map(([v, n]) => `<button data-act="dayType" data-id="${v}" aria-pressed="${(ov.type || "auto") === v}">${n}</button>`).join("")}</div>
       <p class="hint">Двойные баллы в этот день:</p>
       <div class="chips">${tasks.map(t => `<button class="chip" data-act="dayX2" data-id="${t.id}" aria-pressed="${(ov.x2 || []).includes(t.id)}">×2 ${esc(t.title)}</button>`).join("") || `<span class="hint">Нет дел на этот день.</span>`}</div>`;
@@ -1008,6 +1009,7 @@ document.addEventListener("click", e => {
   if (act === "selDay") { S.selDay = id; render(); return; }
   if (act === "calKid") { S.calKid = id; render(); return; }
   if (act === "calPrev" || act === "calNext") { const [y, m] = S.calMonth.split("-").map(Number); S.calMonth = F.monthKey(new Date(y, m - 1 + (act === "calNext" ? 1 : -1), 1)); render(); return; }
+  if ((act === "dayType" || act === "dayX2") && S.selDay < today()) return toast("Прошедший день менять нельзя");
   if (act === "dayType") { S.be.setFamily({ days: { [S.selDay]: { type: id } } }).then(() => toast(id === "auto" ? "День как в календаре" : id === "off" ? "День сделан выходным" : "День сделан рабочим")).catch(fail); return; }
   if (act === "dayX2") { const cur = (S.cfg.days?.[S.selDay]?.x2 || []).slice(); const i = cur.indexOf(id); i >= 0 ? cur.splice(i, 1) : cur.push(id); S.be.setFamily({ days: { [S.selDay]: { x2: cur } } }).then(() => toast(i >= 0 ? "Двойные баллы сняты" : "В этот день баллы ×2")).catch(fail); return; }
   if (act === "inviteWho") return inviteWho(id);
