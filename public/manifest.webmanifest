@@ -1,15 +1,31 @@
 {
-  "name": "Семейные квесты",
-  "short_name": "Квесты",
+  "name": "Family Quests",
+  "short_name": "Family Quests",
   "description": "Дела по дому и учёба за баллы, календарь и награды",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0F1328",
-  "theme_color": "#0F1328",
+  "background_color": "#0E1226",
+  "theme_color": "#0E1226",
   "lang": "ru",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

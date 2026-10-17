@@ -17,7 +17,7 @@ export async function firebaseBackend() {
   // Вход сохраняется на устройстве: после закрытия приложения пароль не нужен, пока не нажат «Выйти».
   const auth = A.initializeAuth(app, { persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence], popupRedirectResolver: A.browserPopupRedirectResolver });
   const db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
-  const { doc, collection, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, updateDoc } = F;
+  const { doc, collection, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, arrayUnion, arrayRemove, writeBatch } = F;
   let fid = null, me = null;
   const fam = (...p) => doc(db, "families", fid, ...p);
 
@@ -75,6 +75,23 @@ export async function firebaseBackend() {
     async oldPhotos(before) { const s = await getDocs(collection(db, "families", fid, "photos")); return s.docs.filter(d => (d.data().at || 0) < before).map(d => d.id); },
     updateMember: (u, patch) => setDoc(fam("members", u), patch, { merge: true }),
     removeMember: u => deleteDoc(fam("members", u)),
+    /** Полное удаление семьи: все записи, фото, участники и сама семья. */
+    async deleteFamily(user) {
+      const wipe = async refs => {
+        for (let i = 0; i < refs.length; i += 400) {
+          const b = writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit();
+        }
+      };
+      for (const sub of ["kidlog", "plog", "photos", "sent"]) {
+        const snap = await getDocs(collection(db, "families", fid, sub));
+        await wipe(snap.docs.map(d => d.ref));
+      }
+      const mem = await getDocs(collection(db, "families", fid, "members"));
+      await wipe(mem.docs.filter(d => d.id !== user.uid).map(d => d.ref));
+      await deleteDoc(doc(db, "families", fid));
+      await deleteDoc(doc(db, "families", fid, "members", user.uid));
+      await setDoc(doc(db, "users", user.uid), { families: arrayRemove(fid) }, { merge: true });
+    },
     async createInvite(user, role, kidId) {
       const code = code8();
       await setDoc(doc(db, "invites", code), { fid, role, kidId: kidId || null, createdBy: user.uid, exp: Date.now() + 7 * 864e5 });
@@ -143,6 +160,7 @@ export function demoBackend(seedFn) {
     updateMember: async (u, p) => { store.members[u] = deepMerge(store.members[u] || {}, p); later(); },
     removeMember: async u => { delete store.members[u]; later(); },
     createInvite: async () => code8(),
+    deleteFamily: async () => { throw new Error("В демо-режиме семью удалить нельзя."); },
     enablePush: async () => { throw new Error("В демо-режиме уведомления не подключаются."); }, resumePush: async () => {},
   };
 }

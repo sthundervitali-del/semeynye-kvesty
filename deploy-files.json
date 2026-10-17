@@ -1,11 +1,16 @@
 [
  "firestore.rules",
  "public/app.js",
+ "public/apple-touch-icon.png",
  "public/backend.js",
  "public/core.js",
+ "public/en.js",
+ "public/favicon-32.png",
  "public/firebase-messaging-sw.js",
+ "public/i18n.js",
  "public/icon-192.png",
  "public/icon-512.png",
+ "public/icon.svg",
  "public/index.html",
  "public/manifest.webmanifest",
  "public/styles.css"

@@ -173,9 +173,13 @@ var FQ = (function () {
     var pts = 0; done.forEach(function (e) { if (e.status === "ok") pts += e.value; });
     var planned = tasks.filter(function (t) { return applies(t, s, cfg); });
     var missed = [];
+    // Пропуски считаются только с даты создания семьи и с даты включения дела.
+    var startDay = cfg.createdAt ? dayKey(new Date(cfg.createdAt)) : "";
     if (s <= todayS) {
       planned.forEach(function (t) {
         if (!t.mandatory) return;
+        var from = t.since && t.since > startDay ? t.since : startDay;
+        if (from && s < from) return;
         if (s === todayS) { var dl = deadline(t, s, cfg, now); if (!dl || dl.phase !== "closed") return; }
         var ok = done.some(function (e) { return e.ref === t.id && e.status !== "no"; });
         if (!ok) missed.push(t);

@@ -23,11 +23,12 @@ service cloud.firestore {
     match /families/{fid} {
       allow read: if isMember(fid);
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isParent(fid);
+      allow update, delete: if isParent(fid);
 
       match /members/{uid} {
         allow read: if isMember(fid);
-        allow create: if signedIn() && request.auth.uid == uid && (
+        allow create: if signedIn() && request.auth.uid == uid
+          && exists(/databases/$(database)/documents/families/$(fid)) && (
           (get(/databases/$(database)/documents/families/$(fid)).data.createdBy == request.auth.uid
             && request.resource.data.role == 'parent')
           || (request.resource.data.code is string
@@ -63,7 +64,8 @@ service cloud.firestore {
       }
       // Служебные отметки сервер-скрипта (напоминания уже отправлены).
       match /sent/{day} {
-        allow read, write: if false;
+        allow read, delete: if isParent(fid);
+        allow create, update: if false;
       }
     }
   }
