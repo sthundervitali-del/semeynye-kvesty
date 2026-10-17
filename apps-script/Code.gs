@@ -318,14 +318,30 @@ function push(member, fid, title, body) {
   if (dead.length) fsPatch("families/" + fid + "/members/" + member.id, { tokens: tokens.filter(function (t) { return dead.indexOf(t) < 0; }) }, ["tokens"]);
 }
 
+/* ---------- язык уведомлений ---------- */
+var TPL_EN = { school: "Leave for school", bed: "Make the bed", teeth: "Brush teeth morning and evening", homework: "Do homework", room: "Tidy room", sleep: "Go to bed",
+  read: "Read a book for 20 minutes", cook: "Help with lunch or dinner", trash: "Take out the trash", clean: "Deep-clean the room", vacuum: "Vacuum the flat",
+  sport: "Exercise or sport for 20 minutes", flowers: "Water the plants", dishes: "Wash everyone's dishes", grade: "Get a good grade", exam: "An hour of test prep", help: "Help parents without being asked" };
+var WISH_EN = { games30: "+30 minutes of computer games", movie: "Choose the family movie", late: "Go to bed an hour later on Friday", food: "Favourite dinner",
+  nochores: "A day without chores", book: "A craft kit or a book of your choice", cinema: "Movies with friends", ingame: "In-game purchase (as agreed)",
+  trip: "A trip or outing of your choice", big: "A big wish from the list" };
+function isEn(m) { return m && m.lang === "en"; }
+/** Название дела/награды на языке участника (свои названия не переводятся). */
+function titleFor(m, title, item) {
+  if (!isEn(m) || !item || !item.tpl) return title;
+  var key = String(item.tpl).split("_")[0];
+  var en = TPL_EN[key] || WISH_EN[key];
+  return en && (item.title === title || !item.title) ? en : title;
+}
+
 /* ---------- Gemini ---------- */
-function aiCheck(e, task, kid, photos) {
+function aiCheck(e, task, kid, photos, lang) {
   var key = prop("GEMINI_KEY"); if (!key || !photos.length) return null;
   var prompt = "Ты помогаешь родителям проверять фото-отчёты детей о домашних делах и учёбе.\n" +
     "Ребёнку " + (kid && kid.age || "") + " лет. Задание: «" + e.title + "».\n" +
     (e.checks && e.checks.length ? "Пункты, которые ребёнок отметил как выполненные:\n- " + e.checks.join("\n- ") + "\n" : "") +
     "Посмотри на фото и оцени, видно ли, что задание выполнено. Будь доброжелательным, но честным: если на фото беспорядок, нет результата или фото не относится к заданию, это \"redo\". Если по фото понять нельзя, это \"unsure\".\n" +
-    "Ответь только JSON: {\"verdict\":\"ok\"|\"redo\"|\"unsure\",\"comment\":\"1–2 коротких предложения для ребёнка на русском: что видно и что исправить\"}";
+    "Ответь только JSON: {\"verdict\":\"ok\"|\"redo\"|\"unsure\",\"comment\":\"1–2 коротких предложения для ребёнка " + (lang === "en" ? "на английском языке (in English)" : "на русском") + ": что видно и что исправить\"}";
   var parts = [{ text: prompt }];
   photos.forEach(function (d) { var m = /^data:(image\/[a-z]+);base64,(.*)$/.exec(d || ""); if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } }); });
   var model = prop("GEMINI_MODEL", "gemini-3.5-flash-lite");
@@ -384,18 +400,23 @@ function processFamily(fam) {
       if (dl && dl.phase === "closed") return;               // строгий срок прошёл
       var pts = t.pts * FQ.mult(cfg, todayS, t.id);
       if (dl && dl.phase === "late") pts = Math.round(pts * dl.pct / 100);
-      var title, body;
-      if (nowMin <= tm + 5) {                                 // первое напоминание
-        if (!once("r_" + t.id + "_" + k.id)) return;
-        title = "⏰ " + t.time + " — " + t.title; body = "Не забудь! За это +" + pts + (FQ.mult(cfg, todayS, t.id) > 1 ? " (сегодня ×2)" : "");
-      } else {                                                // повторы, пока не отмечено
+      var x2 = FQ.mult(cfg, todayS, t.id) > 1, first = nowMin <= tm + 5, left = dl && dl.phase === "open" ? Math.max(1, Math.ceil(dl.left / 60000)) : 0;
+      if (first) { if (!once("r_" + t.id + "_" + k.id)) return; }
+      else {                                                  // повторы, пока не отмечено
         var every = +t.repeat || 0; if (every <= 0) return;
         var slot = Math.floor((nowMin - tm) / every); if (slot < 1) return;
         if (!once("r_" + t.id + "_" + k.id + "_" + slot)) return;
-        title = "🔔 Ещё не отмечено: " + t.title;
-        body = (dl && dl.phase === "late") ? "Срок прошёл, но ещё можно сдать за +" + pts + ". Нажми «Готово!»." : (dl && dl.phase === "open" ? "Осталось " + Math.max(1, Math.ceil(dl.left / 60000)) + " мин. " : "") + "Нажми «Готово!», когда сделаешь.";
       }
-      kidMembers(k.id).forEach(function (m) { push(m, fid, title, body); });
+      kidMembers(k.id).forEach(function (m) {
+        var en = isEn(m), name = titleFor(m, t.title, t), title, body;
+        if (first) { title = "⏰ " + t.time + " — " + name; body = en ? "Don't forget! +" + pts + (x2 ? " (×2 today)" : "") : "Не забудь! За это +" + pts + (x2 ? " (сегодня ×2)" : ""); }
+        else {
+          title = (en ? "🔔 Not done yet: " : "🔔 Ещё не отмечено: ") + name;
+          body = (dl && dl.phase === "late") ? (en ? "The deadline has passed, but you can still hand it in for +" + pts + ". Tap Done!." : "Срок прошёл, но ещё можно сдать за +" + pts + ". Нажми «Готово!».")
+            : (left ? (en ? left + " min left. " : "Осталось " + left + " мин. ") : "") + (en ? "Tap Done! when you finish." : "Нажми «Готово!», когда сделаешь.");
+        }
+        push(m, fid, title, body);
+      });
     });
   });
 
@@ -405,9 +426,13 @@ function processFamily(fam) {
     kids.forEach(function (k) {
       if (!once("c_" + k.id)) return;
       var acc = FQ.account(k.id, data, cfg, now + 60000);
-      var body = acc.today ? "Сегодня зачислено +" + acc.today + "." : "Сегодня баллов нет — завтра получится!";
-      if (FQ.isoDow(todayS) === 7) body += " Баллы за неделю открыты: можно тратить " + acc.available + ".";
-      kidMembers(k.id).forEach(function (m) { push(m, fid, FQ.isoDow(todayS) === 7 ? "🎉 Баллы за неделю доступны!" : "⭐ Итоги дня", body); });
+      var sun = FQ.isoDow(todayS) === 7;
+      kidMembers(k.id).forEach(function (m) {
+        var en = isEn(m);
+        var body = acc.today ? (en ? "Credited today: +" + acc.today + "." : "Сегодня зачислено +" + acc.today + ".") : (en ? "No points today, you'll get them tomorrow!" : "Сегодня баллов нет — завтра получится!");
+        if (sun) body += en ? " This week's points are unlocked: you can spend " + acc.available + "." : " Баллы за неделю открыты: можно тратить " + acc.available + ".";
+        push(m, fid, sun ? (en ? "🎉 This week's points are available!" : "🎉 Баллы за неделю доступны!") : (en ? "⭐ Today's results" : "⭐ Итоги дня"), body);
+      });
     });
   }
 
@@ -422,7 +447,8 @@ function processFamily(fam) {
     aiDone++;
     var pics = fsBatchGet(e.photos.map(function (p) { return "families/" + fid + "/photos/" + p; })).map(function (x) { return x.data; });
     var task = (cfg.tasks || {})[e.ref] || {}, kid = kids.filter(function (k) { return k.id === e.kid; })[0];
-    var ai = aiCheck(e, task, kid, pics); if (!ai) return;
+    var km = kidMembers(e.kid)[0];
+    var ai = aiCheck(e, task, kid, pics, km && km.lang); if (!ai) return;
     ai.forAt = e.at;
     var d = {}; d[e.id] = { ai: ai }; var mask = ["d." + e.id + ".ai"];
     if (cfg.settings && cfg.settings.autoAI && ai.verdict === "ok") {
@@ -433,19 +459,23 @@ function processFamily(fam) {
     fsPatch("families/" + fid + "/plog/" + e.doc, { d: d }, mask);
   });
   if (fresh.length) {
-    var lines = fresh.slice(0, 4).map(function (e) { return kidName(e.kid) + ": " + (e.type === "wish" ? "хочет «" + e.title + "»" : e.title); });
-    parents.forEach(function (m) { push(m, fid, "🔔 На проверку: " + fresh.length, lines.join("; ") + (fresh.length > 4 ? "…" : "")); });
+    parents.forEach(function (m) {
+      var en = isEn(m);
+      var lines = fresh.slice(0, 4).map(function (e) { var item = e.type === "wish" ? (cfg.wishes || {})[e.ref] : (cfg.tasks || {})[e.ref], nm = titleFor(m, e.title, item);
+        return kidName(e.kid) + ": " + (e.type === "wish" ? (en ? "wants “" + nm + "”" : "хочет «" + nm + "»") : nm); });
+      push(m, fid, (en ? "🔔 To review: " : "🔔 На проверку: ") + fresh.length, lines.join("; ") + (fresh.length > 4 ? "…" : ""));
+    });
   }
 
   // 4. Подарки.
   data.gifts.forEach(function (g) {
     if (g.kind !== "gift" || now - g.at > 3 * 3600e3 || !once("g_" + g.id)) return;
-    kidMembers(g.kid).forEach(function (m) { push(m, fid, "🎁 Подарок от родителей: +" + g.pts, g.msg || "Открой приложение!"); });
+    kidMembers(g.kid).forEach(function (m) { var en = isEn(m); push(m, fid, (en ? "🎁 A gift from your parents: +" : "🎁 Подарок от родителей: +") + g.pts, g.msg || (en ? "Open the app!" : "Открой приложение!")); });
   });
   // 4а. Одобренные желания.
   data.entries.forEach(function (e) {
     if (e.type !== "wish" || e.status !== "ok" || !e.dec || now - (e.dec.decidedAt || 0) > 3 * 3600e3 || !once("w_" + e.id)) return;
-    kidMembers(e.kid).forEach(function (m) { push(m, fid, "🎉 Желание исполняется: " + e.title, e.dec.note || "Родители одобрили твою заявку. Открой приложение!"); });
+    kidMembers(e.kid).forEach(function (m) { var en = isEn(m); push(m, fid, (en ? "🎉 Your wish is coming true: " : "🎉 Желание исполняется: ") + titleFor(m, e.title, (cfg.wishes || {})[e.ref]), e.dec.note || (en ? "Your parents approved your request. Open the app!" : "Родители одобрили твою заявку. Открой приложение!")); });
   });
 
   // Удаление старых фото-отчётов раз в сутки (срок — в настройках семьи, по умолчанию 14 дней).

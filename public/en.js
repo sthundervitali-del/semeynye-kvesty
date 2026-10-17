@@ -138,7 +138,7 @@
     "Помочь родителям без просьбы": "Help parents without being asked",
     "Все письменные задания сделаны": "All written work done", "Устные выучены": "Oral work learned", "Рюкзак собран на завтра": "Backpack packed for tomorrow",
     "Стол разобран": "Desk cleared", "Одежда в шкафу или в корзине": "Clothes in the closet or hamper", "На полу ничего не валяется": "Nothing on the floor",
-    "Вещи в шкафу": "Things in the closet", "Вытерта пыль": "Dusted", "Пропылесосено": "Vacuumed", "Порядок в шкафу": "Closet tidy", "Мусор вынесен": "Trash out",
+    "Вещи в шкафу": "Things in the closet", "Стол разобран\nВещи в шкафу": "Desk cleared\nThings in the closet", "Вытерта пыль": "Dusted", "Пропылесосено": "Vacuumed", "Порядок в шкафу": "Closet tidy", "Мусор вынесен": "Trash out",
     "Стол разобран, на полу чисто. Молодец!": "Desk cleared, floor clean. Well done!", "фото комнаты (демо)": "room photo (demo)",
     "+30 минут игр на компьютере": "+30 minutes of computer games", "Выбрать фильм на семейный вечер": "Choose the family movie",
     "Лечь спать на час позже в пятницу": "Go to bed an hour later on Friday", "Любимая еда на ужин": "Favourite dinner",
