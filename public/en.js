@@ -207,7 +207,7 @@
     "ждёт ответа": "awaiting reply", "новый ответ": "new reply", "есть ответ": "answered", "ждёт ответа поддержки": "waiting for support",
     "Поддержка Family Quests": "Family Quests Support", "Вы": "You", "Пользователь": "User", "Ответ пользователю": "Reply to the user", "Дописать в запрос": "Add to this request",
     "Ваш ответ увидит только автор запроса.": "Only the author of the request will see your reply.", "Уточнение или новый вопрос по этой теме.": "A clarification or a new question on this topic.",
-    "Ответ отправлен": "Reply sent", "Сообщение отправлено": "Message sent",
+    "Ответ отправлен": "Reply sent", "Запрос удалён": "Request deleted", "Удалить запрос": "Delete request", "Чтобы удалить запрос, смахните его влево.": "Swipe a request left to delete it.", "Чтобы удалить запрос из списка, смахните его влево. У пользователя он останется, пока он сам его не удалит.": "Swipe a request left to remove it from the list. The user keeps it until they delete it themselves.", "Сообщение отправлено": "Message sent",
     // уровни
     "Новичок": "Rookie", "Помощник": "Helper", "Умелец": "Handy", "Мастер дома": "House master", "Герой семьи": "Family hero", "Легенда": "Legend", "Великий магистр": "Grand master",
     // статусы
@@ -259,6 +259,7 @@
     [/^Ждут проверки · (\d+)$/, function (n) { return "Waiting for review · " + n; }],
     [/^Ещё (\d+) (балл|балла|баллов)$/, function (n) { return pl(n, "more point", "more points"); }],
     [/^Обменять (\d+) (балл|балла|баллов) на «(.+)»\?$/, function (n, w, x) { return "Exchange " + pl(n, "point", "points") + " for “" + t(x) + "”?"; }],
+    [/^Удалить запрос «(.+)»\?( У пользователя он останется\.)?$/, function (x, y) { return "Delete the request \u201c" + x + "\u201d?" + (y ? " The user will keep it." : ""); }],
     [/^Удалить «(.+)»\?$/, function (x) { return "Delete “" + t(x) + "”?"; }],
     [/^Засчитать «(.+)» за (.+)\?$/, function (x, d) { return "Credit “" + t(x) + "” for " + t(d) + "?"; }],
     [/^Отменить заявку на «(.+)»\?$/, function (x) { return "Cancel the request for “" + t(x) + "”?"; }],

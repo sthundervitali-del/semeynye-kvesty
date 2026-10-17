@@ -82,7 +82,11 @@ export async function firebaseBackend() {
       return setDoc(doc(db, "support", id), { id, uid: user.uid, email: user.email || "", name: user.displayName || "", fid, family: req.family || "", subject: req.subject,
         lang: req.lang || "ru", app: req.app || "", status: "open", thread: [{ from: "user", text: req.text, at }], at, updatedAt: at, userSeenAt: at }); },
     supportMsg: (id, from, text) => { const at = Date.now();
-      return setDoc(doc(db, "support", id), { thread: arrayUnion({ from, text, at }), status: from === "user" ? "open" : "answered", updatedAt: at, [from === "user" ? "userSeenAt" : "adminSeenAt"]: at }, { merge: true }); },
+      return setDoc(doc(db, "support", id), { thread: arrayUnion({ from, text, at }), status: from === "user" ? "open" : "answered", updatedAt: at, [from === "user" ? "userSeenAt" : "adminSeenAt"]: at,
+        [from === "user" ? "adminDeleted" : "userDeleted"]: false }, { merge: true }); },
+    /** Удалить запрос у себя. Документ удаляется совсем, когда его удалили обе стороны (или это свой запрос администратора). */
+    supportDelete: (r, admin, me) => { const other = admin ? r.userDeleted || r.uid === me : r.adminDeleted;
+      return other ? deleteDoc(doc(db, "support", r.id)) : setDoc(doc(db, "support", r.id), { [admin ? "adminDeleted" : "userDeleted"]: true }, { merge: true }); },
     supportSeen: (id, admin) => setDoc(doc(db, "support", id), { [admin ? "adminSeenAt" : "userSeenAt"]: Date.now() }, { merge: true }),
     /** Полное удаление семьи: все записи, фото, участники и сама семья. */
     async deleteFamily(user) {
@@ -172,6 +176,7 @@ export function demoBackend(seedFn) {
     watchSupport: (user, admin, cb) => { const fire = () => cb((store.support || []).map(r => ({ ...r, thread: r.thread.slice() }))); store.supportCb = fire; fire(); return () => { store.supportCb = null; }; },
     sendSupport: async (user, req) => { const at = Date.now(); (store.support = store.support || []).unshift({ id: uid("s"), uid: user.uid, email: user.email, name: user.displayName, family: req.family, subject: req.subject, status: "open", thread: [{ from: "user", text: req.text, at }], at, updatedAt: at, userSeenAt: at }); store.supportCb?.(); },
     supportMsg: async (id, from, text) => { const r = (store.support || []).find(x => x.id === id); if (!r) return; const at = Date.now(); r.thread.push({ from, text, at }); r.status = from === "user" ? "open" : "answered"; r.updatedAt = at; r[from === "user" ? "userSeenAt" : "adminSeenAt"] = at; store.supportCb?.(); },
+    supportDelete: async (r) => { store.support = (store.support || []).filter(x => x.id !== r.id); store.supportCb?.(); },
     supportSeen: async (id, admin) => { const r = (store.support || []).find(x => x.id === id); if (r) { r[admin ? "adminSeenAt" : "userSeenAt"] = Date.now(); store.supportCb?.(); } },
     createInvite: async () => code8(),
     deleteFamily: async () => { throw new Error("В демо-режиме семью удалить нельзя."); },

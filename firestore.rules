@@ -28,6 +28,9 @@ service cloud.firestore {
 
     // Запросы в поддержку — переписка внутри приложения. Создаёт только родитель семьи от своего имени,
     // читают автор и администраторы. Адрес поддержки хранится в свойствах скрипта и никому не виден.
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function threadOk(who) { return !('thread' in changed())
+      || (request.resource.data.thread.size() == resource.data.thread.size() + 1 && lastMsg().from == who && lastMsg().text is string && lastMsg().text.size() <= 4000); }
     function lastMsg() { return request.resource.data.thread[request.resource.data.thread.size() - 1]; }
     match /support/{id} {
       allow create: if signedIn()
@@ -38,15 +41,17 @@ service cloud.firestore {
         && lastMsg().from == 'user' && lastMsg().text is string && lastMsg().text.size() > 0 && lastMsg().text.size() <= 4000
         && !('mailedAt' in request.resource.data) && !('notifiedAt' in request.resource.data);
       allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      // Удаление: администратор — всегда; автор — когда администратор тоже удалил запрос у себя.
+      allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid && resource.data.get('adminDeleted', false) == true);
       allow update: if signedIn() && (
         (resource.data.uid == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['thread', 'status', 'userSeenAt', 'updatedAt'])
-          && (!('thread' in request.resource.data.diff(resource.data).affectedKeys())
-              || (request.resource.data.thread.size() == resource.data.thread.size() + 1 && lastMsg().from == 'user' && lastMsg().text.size() <= 4000)))
+          && changed().hasOnly(['thread', 'status', 'userSeenAt', 'updatedAt', 'userDeleted', 'adminDeleted'])
+          && (!('adminDeleted' in changed()) || request.resource.data.adminDeleted == false)
+          && threadOk('user'))
         || (isAdmin()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['thread', 'status', 'adminSeenAt', 'updatedAt'])
-          && (!('thread' in request.resource.data.diff(resource.data).affectedKeys())
-              || (request.resource.data.thread.size() == resource.data.thread.size() + 1 && lastMsg().from == 'support'))));
+          && changed().hasOnly(['thread', 'status', 'adminSeenAt', 'updatedAt', 'adminDeleted', 'userDeleted'])
+          && (!('userDeleted' in changed()) || request.resource.data.userDeleted == false)
+          && threadOk('support')));
     }
 
     match /families/{fid} {

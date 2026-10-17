@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.8.1", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.9.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -536,8 +536,9 @@ const thr = r => r.thread || [{ from: "user", text: r.text || "", at: r.at }];
 const lastOf = r => { const t = thr(r); return t[t.length - 1] || {}; };
 const userUnread = r => lastOf(r).from === "support" && lastOf(r).at > (r.userSeenAt || 0);
 const adminUnread = r => lastOf(r).from === "user" && lastOf(r).at > (r.adminSeenAt || 0);
-const mySupport = () => (S.support || []).filter(r => r.uid === S.user?.uid).sort((a, b) => (b.updatedAt || b.at) - (a.updatedAt || a.at));
-const supportBadge = () => isParent() ? mySupport().filter(userUnread).length + (S.isAdmin ? (S.support || []).filter(r => r.uid !== S.user.uid && adminUnread(r)).length : 0) : 0;
+const mySupport = () => (S.support || []).filter(r => r.uid === S.user?.uid && !r.userDeleted).sort((a, b) => (b.updatedAt || b.at) - (a.updatedAt || a.at));
+const adminList = () => (S.support || []).filter(r => !r.adminDeleted);
+const supportBadge = () => isParent() ? mySupport().filter(userUnread).length + (S.isAdmin ? adminList().filter(r => r.uid !== S.user.uid && adminUnread(r)).length : 0) : 0;
 let stopSupport = () => {};
 window.__fqState = () => ({ parent: isParent(), admin: S.isAdmin, support: (S.support || []).length, loaded: S.loaded, started: !!S._supStarted, err: S._supErr || null });
 function startSupport() {
@@ -550,14 +551,14 @@ function supStatus(r, admin) {
   return lastOf(r).from === "support" ? `<span class="pill ok">есть ответ</span>` : `<span class="pill wait">${admin ? "ждёт ответа" : "ждёт ответа поддержки"}</span>`;
 }
 function supRow(r, admin) {
-  return `<button class="set-row" data-act="setPage" data-id="${admin ? "adm:" : "sup:"}${r.id}"><span class="tile ${(admin ? adminUnread(r) : userUnread(r)) ? "c-gold" : "c-gray"}">${ic("inbox")}</span>
-    <span class="t"><b>${esc(r.subject)}</b><small>${admin ? esc((r.name || r.email || "") + " · " + (r.family || "")) + " · " : ""}${fmtDate(r.updatedAt || r.at)}</small><span class="st">${supStatus(r, admin)}</span></span>${ic("chev-r", "chev")}</button>`;
+  return `<div class="srow sup" data-id="${r.id}"><button class="swipe-del" data-act="supDel" data-id="${r.id}" data-admin="${admin ? 1 : ""}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit sup-in"><button class="set-row" data-act="setPage" data-id="${admin ? "adm:" : "sup:"}${r.id}"><span class="tile ${(admin ? adminUnread(r) : userUnread(r)) ? "c-gold" : "c-gray"}">${ic("inbox")}</span>
+    <span class="t"><b>${esc(r.subject)}</b><small>${admin ? esc((r.name || r.email || "") + " · " + (r.family || "")) + " · " : ""}${fmtDate(r.updatedAt || r.at)}</small><span class="st">${supStatus(r, admin)}</span></span>${ic("chev-r", "chev")}</button></div></div>`;
 }
 function supThread(r, admin) {
   const msgs = thr(r).map(m => { const mine = admin ? m.from === "support" : m.from === "user";
     return `<div class="msg ${mine ? "me" : ""}"><small class="who">${m.from === "support" ? "Поддержка Family Quests" : admin ? esc(r.name || r.email || "Пользователь") : "Вы"} · ${fmtDate(m.at)}</small><div class="txt">${esc(m.text).replace(/\n/g, "<br>")}</div></div>`; }).join("");
   if (admin ? adminUnread(r) : userUnread(r)) setTimeout(() => S.be.supportSeen(r.id, admin).catch(() => {}), 600);
-  return `<section class="card"><div class="card-head"><h2>${esc(r.subject)}</h2>${supStatus(r, admin)}</div>
+  return `<section class="card"><div class="card-head"><h2>${esc(r.subject)}</h2>${supStatus(r, admin)}<button class="btn sm ghost icon danger" data-act="supDel" data-id="${r.id}" data-admin="${admin ? 1 : ""}" aria-label="Удалить запрос">${ic("trash")}</button></div>
     ${admin ? `<p class="hint">${esc(r.name || "")} · ${esc(r.email || "")} · семья «${esc(r.family || "")}» · версия ${esc(r.app || "?")} · язык ${esc(r.lang || "ru")}</p>` : ""}
     <div class="msgs">${msgs}</div>
     <form class="grid" data-form="sup-reply" data-sid="${r.id}" data-admin="${admin ? 1 : ""}"><label class="full">${admin ? "Ответ пользователю" : "Дописать в запрос"}<textarea id="sr-text" name="text" maxlength="4000" required rows="4" placeholder="${admin ? "Ваш ответ увидит только автор запроса." : "Уточнение или новый вопрос по этой теме."}"></textarea></label>
@@ -570,7 +571,7 @@ function closeSwipe(except) { if (swOpen && swOpen !== except) { swOpen.querySel
 document.addEventListener("pointerdown", e => {
   const row = e.target.closest(".srow > .row-edit");
   if (!row) { if (swOpen && !e.target.closest(".swipe-del")) closeSwipe(); return; }
-  if (e.target.closest("[data-drag],button,input,select,a") && !(swOpen && swOpen === row.parentElement)) { closeSwipe(); return; }
+  { const blk = e.target.closest("[data-drag],button,input,select,a"); if (blk && !blk.matches(".srow.sup .set-row") && !(swOpen && swOpen === row.parentElement)) { closeSwipe(); return; } }
   const wrap = row.parentElement, W = 92, x0 = e.clientX, y0 = e.clientY, base = wrap === swOpen ? -W : 0;
   let mode = null, dx = base;
   closeSwipe(wrap);
@@ -731,7 +732,7 @@ function parentSettings() {
       ${row("support", "inbox", "green", "Поддержка", mySupport().some(userUnread) ? "Есть новый ответ" : "Вопрос, ошибка или идея — ответим здесь, в приложении")}
     </div></div>
     ${S.isAdmin ? `<div class="set-group"><h3>Администрирование</h3><div class="set-list">
-      ${row("admin-support", "inbox", "gold", "Запросы пользователей", (() => { const n = (S.support || []).filter(adminUnread).length; return n ? `ждут ответа: ${n}` : "новых нет"; })())}
+      ${row("admin-support", "inbox", "gold", "Запросы пользователей", (() => { const n = adminList().filter(adminUnread).length; return n ? `ждут ответа: ${n}` : "новых нет"; })())}
     </div></div>` : ""}
     <div class="set-group"><h3>Аккаунт</h3><div class="set-list">
       ${S.families.length > 1 ? `<button class="set-row" data-act="switchFamily"><span class="tile c-gray">${ic("users")}</span><span class="t"><b>Сменить семью</b><small>У вас ${S.families.length} ${plural(S.families.length, "семья", "семьи", "семей")}</small></span>${ic("chev-r", "chev")}</button>` : ""}
@@ -785,15 +786,15 @@ function settingsPage(p) {
       <label class="full">Описание<textarea id="sp-text" name="text" maxlength="4000" required rows="5" placeholder="Опишите, что произошло: что вы делали, что ожидали и что получилось. Укажите телефон и браузер, если это ошибка."></textarea></label>
       <div class="full"><button class="btn go">${ic("inbox")} Отправить</button></div></form>
       <p class="hint">Ответ появится здесь, в приложении, и придёт уведомлением на телефон.</p></section>
-      <div class="set-group"><h3>Мои запросы</h3>${mine.length ? `<div class="set-list">${mine.map(r => supRow(r, false)).join("")}</div>` : `<div class="empty slim">Вы ещё не писали в поддержку.</div>`}</div>`;
+      <div class="set-group"><h3>Мои запросы</h3>${mine.length ? `<div class="set-list sup-list">${mine.map(r => supRow(r, false)).join("")}</div><p class="hint">Чтобы удалить запрос, смахните его влево.</p>` : `<div class="empty slim">Вы ещё не писали в поддержку.</div>`}</div>`;
   }
   if (p.startsWith("sup:")) { const r = mySupport().find(x => x.id === p.slice(4)); return sub("Запрос в поддержку", "support") + (r ? supThread(r, false) : `<div class="empty">Загрузка…</div>`); }
   if (p === "admin-support" && S.isAdmin) {
-    const all = (S.support || []).slice().sort((a, b) => (adminUnread(b) - adminUnread(a)) || ((b.updatedAt || b.at) - (a.updatedAt || a.at)));
+    const all = adminList().slice().sort((a, b) => (adminUnread(b) - adminUnread(a)) || ((b.updatedAt || b.at) - (a.updatedAt || a.at)));
     return head("Запросы пользователей") + `<p class="hint">Вы видите запросы всех семей как администратор поддержки. Пользователи видят ответы от имени «Поддержка Family Quests» — ваш адрес им не показывается.</p>
-      ${all.length ? `<div class="set-list">${all.map(r => supRow(r, true)).join("")}</div>` : `<div class="empty">Запросов пока нет.</div>`}`;
+      ${all.length ? `<div class="set-list sup-list">${all.map(r => supRow(r, true)).join("")}</div><p class="hint">Чтобы удалить запрос из списка, смахните его влево. У пользователя он останется, пока он сам его не удалит.</p>` : `<div class="empty">Запросов пока нет.</div>`}`;
   }
-  if (p.startsWith("adm:") && S.isAdmin) { const r = (S.support || []).find(x => x.id === p.slice(4)); return sub("Запрос пользователя", "admin-support") + (r ? supThread(r, true) : `<div class="empty">Загрузка…</div>`); }
+  if (p.startsWith("adm:") && S.isAdmin) { const r = adminList().find(x => x.id === p.slice(4)); return sub("Запрос пользователя", "admin-support") + (r ? supThread(r, true) : `<div class="empty">Загрузка…</div>`); }
   if (p === "danger") return head("Удалить семью") + `<section class="card danger-card"><div class="state">${ic("trash", "h")} <b>Это действие нельзя отменить</b></div>
       <p>Будут удалены все дела, награды, баллы, история, фото и участники семьи «${esc(S.cfg.name || "")}». У второго родителя и детей семья тоже пропадёт.</p>
       <form class="grid" data-form="delFamily"><label class="full">Чтобы подтвердить, введите название семьи<input id="del-name" name="name" autocomplete="off" placeholder="${esc(S.cfg.name || "")}"></label>
@@ -995,6 +996,9 @@ document.addEventListener("click", e => {
   if (act === "goSet") { if (document.querySelector(".scrim")) closeModal(); S.tab = "settings"; S.setPage = id || null; window.scrollTo(0, 0); render(); return; }
   if (act === "tplTasks") return taskTemplates();
   if (act === "tplWishes") return wishTemplates();
+  if (act === "supDel") { const r = (S.support || []).find(x => x.id === id); if (!r) return; const admin = !!el.dataset.admin;
+    ask(`Удалить запрос «${r.subject}»?` + (admin && r.uid !== S.user.uid ? " У пользователя он останется." : ""), "Удалить", () => { swOpen = null;
+      S.be.supportDelete(r, admin, S.user.uid).then(() => { toast("Запрос удалён"); if (S.setPage && S.setPage.endsWith(r.id)) { S.setPage = admin ? "admin-support" : "support"; render(); } }).catch(fail); }, true); return; }
   if (act === "swipeDel") { const kind = el.dataset.kind === "wishes" ? "wishes" : "tasks", t = S.cfg[kind]?.[id]; if (!t) return;
     ask(`Удалить «${t.title}»?`, "Удалить", () => { swOpen = null; S.be.setFamily({ [kind]: { [id]: { del: true } } }).then(() => toast(kind === "wishes" ? "Награда удалена" : "Дело удалено")).catch(fail); }, true); return; }
   if (act === "delKid") { const k = kidById(id); if (!k) return;
