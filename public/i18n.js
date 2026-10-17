@@ -7,8 +7,7 @@
   var KEY = "fq-lang";
   function detect() {
     try { var v = localStorage.getItem(KEY); if (v === "ru" || v === "en") return v; } catch (_) {}
-    var n = (navigator.language || "ru").toLowerCase();
-    return /^(ru|be|uk|kk)/.test(n) ? "ru" : "en";
+    return "ru"; // язык по умолчанию; English включается в настройках
   }
   var cur = detect();
   var CYR = /[А-Яа-яЁё]/;

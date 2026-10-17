@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.3.2", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.4.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -31,7 +31,7 @@ const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localSt
 const S = {
   be: null, user: null, families: [], fid: null, cfg: null, members: [], kidlogs: [], plogs: [],
   data: { entries: [], gifts: [] }, me: null, loaded: false, tab: null, preview: null,
-  calMonth: F.monthKey(), calKid: null, sel: null, drag: false, selDay: null, photos: {}, error: null, prevStatus: null, setPage: null,
+  calMonth: F.monthKey(), calKid: null, sel: null, selKind: null, sending: new Set(), drag: false, selDay: null, photos: {}, error: null, prevStatus: null, setPage: null,
 };
 const isParent = () => S.me?.role === "parent";
 const kidsList = () => S.cfg?.kids || [];
@@ -500,13 +500,13 @@ function taskMeta(t) {
 function parentTasks() {
   const all = F.live(S.cfg.tasks);
   const on = all.filter(t => t.active !== false).length;
-  const sel = S.sel;
+  const sel = S.selKind === "tasks" ? S.sel : null;
   if (sel) for (const id of [...sel]) if (!S.cfg.tasks[id] || S.cfg.tasks[id].del) sel.delete(id);
   let out = sel
     ? `<section class="card"><div class="card-head"><h2>${ic("check-square", "h")} Выбор дел</h2><span class="hint">выбрано ${sel.size}</span></div>
       <p class="hint">Нажимайте на дела, которые нужно удалить. В каждом разделе есть кнопка «Все».</p></section>`
     : `<section class="card"><div class="card-head"><h2>${ic("checklist", "h")} Дела</h2><span class="hint">${all.length ? `включено ${on} из ${all.length}` : "список пуст"}</span></div>
-    <div class="btnrow"><button class="btn go" data-act="tplTasks">${ic("layers")} Из шаблонов</button><button class="btn" data-act="taskForm" data-cat="mb">${ic("plus")} Своё дело</button>${all.length ? `<button class="btn ghost" data-act="selMode">${ic("check-square")} Выбрать</button>` : ""}${on ? `<button class="btn ghost" data-act="allOff">Выключить все</button>` : ""}</div>
+    <div class="btnrow"><button class="btn go" data-act="tplTasks">${ic("layers")} Из шаблонов</button><button class="btn" data-act="taskForm" data-cat="mb">${ic("plus")} Своё дело</button>${all.length ? `<button class="btn ghost" data-act="selMode" data-id="tasks">${ic("check-square")} Выбрать</button>` : ""}${on ? `<button class="btn ghost" data-act="allOff">Выключить все</button>` : ""}</div>
     <p class="hint">Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке дела увидят дети. Выключенные дела остаются на своём месте, дети их не видят, напоминания по ним не приходят.</p></section>`;
   if (!all.length) return out + `<div class="empty big">${ic("checklist")}<b>Список дел пуст</b><span>Выберите готовые дела из шаблонов или создайте свои.</span><button class="btn go" data-act="tplTasks">${ic("layers")} Открыть шаблоны</button></div>`;
   const hints = { mb: "Привязаны к дням. По ним приходят напоминания, пропуски видны в календаре.", ob: "Привязаны к дням, но по желанию.", mu: "Нужно сделать N раз за неделю в любой день.", ou: "Можно делать когда угодно ради баллов." };
@@ -519,7 +519,7 @@ function parentTasks() {
     const row = t => {
       const icon = `<span class="ic cat-${t.cat}">${ic(CATS[t.cat]?.ic || "star")}</span>`, text = `<div class="t"><b>${esc(t.title)}</b><small>${taskMeta(t)}</small></div>`;
       if (sel) { const on = sel.has(t.id); return `<div class="row-edit trow pick ${on ? "on" : ""} ${t.active === false ? "off" : ""}" data-act="selTask" data-id="${t.id}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="pbox">${ic("check")}</span>${icon}${text}</div>`; }
-      return `<div class="srow" data-id="${t.id}"><button class="swipe-del" data-act="swipeDel" data-id="${t.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow ${t.active === false ? "off" : ""}"><button class="grip" data-drag aria-label="Перетащить: ${esc(t.title)}">${ic("grip")}</button>${icon}${text}
+      return `<div class="srow" data-id="${t.id}"><button class="swipe-del" data-act="swipeDel" data-kind="tasks" data-id="${t.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow ${t.active === false ? "off" : ""}"><button class="grip" data-drag aria-label="Перетащить: ${esc(t.title)}">${ic("grip")}</button>${icon}${text}
         <button class="sw" role="switch" aria-checked="${t.active !== false}" data-act="taskToggle" data-id="${t.id}" aria-label="${t.active !== false ? "Выключить" : "Включить"}: ${esc(t.title)}"></button>
         <button class="btn sm ghost icon" data-act="taskForm" data-id="${t.id}" aria-label="Изменить: ${esc(t.title)}">${ic("pencil")}</button></div></div>`;
     };
@@ -527,9 +527,10 @@ function parentTasks() {
       <p class="hint">${hints[c]}</p>
       ${list.length ? `<div class="sortable" data-cat="${c}">${list.map(row).join("")}</div>` : `<div class="empty slim">Пока пусто</div>`}</section>`;
   }).join("");
-  if (sel) out += `<div class="selbar"><button class="btn ghost" data-act="selMode">Отмена</button><button class="btn no" data-act="selDel" ${sel.size ? "" : "disabled"}>${ic("trash")} Удалить (${sel.size})</button></div><div class="selbar-pad"></div>`;
+  if (sel) out += selBar(sel);
   return out;
 }
+function selBar(sel) { return `<div class="selbar"><button class="btn ghost" data-act="selMode">Отмена</button><button class="btn no" data-act="selDel" ${sel.size ? "" : "disabled"}>${ic("trash")} Удалить (${sel.size})</button></div><div class="selbar-pad"></div>`; }
 /* Свайп влево по делу — кнопка «Удалить», как в iPhone. */
 let swOpen = null;
 function closeSwipe(except) { if (swOpen && swOpen !== except) { swOpen.querySelector(".row-edit").style.transform = ""; swOpen.classList.remove("open"); swOpen = null; } }
@@ -646,9 +647,18 @@ function parentRewards() {
     <details><summary>Бонус или списание без поздравления</summary><form class="grid" data-form="bonus"><label>Кому<select id="b-kid" name="kid">${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("")}</select></label>
     <label>Баллы (минус — списать)<input id="b-pts" name="pts" type="number" inputmode="numeric" value="-10" required></label><label class="full">Причина<input id="b-why" name="why" required></label><div><button class="btn dark">Применить</button></div></form></details></section>`;
   const wishes = F.live(S.cfg.wishes).sort((a, b) => a.cost - b.cost);
-  out += `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Магазин желаний</h2></div>
-    <div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button></div>
-    ${wishes.length ? `<div>${wishes.map(w => `<div class="row-edit w"><span class="ic cat-gold">${ic("gift")}</span><div class="t"><b>${esc(w.title)}</b><small class="num">${coin(13)} ${w.cost} · ${w.who === "all" ? "всем" : esc(kidById(w.who)?.name || "")}</small></div><button class="btn sm ghost icon" data-act="wishForm" data-id="${w.id}" aria-label="Изменить: ${esc(w.title)}">${ic("pencil")}</button></div>`).join("")}</div>` : `<div class="empty">${ic("gift")}Наград пока нет. Выберите из шаблонов или добавьте свою.</div>`}</section>`;
+  const wsel = S.selKind === "wishes" ? S.sel : null;
+  if (wsel) for (const id of [...wsel]) if (!S.cfg.wishes[id] || S.cfg.wishes[id].del) wsel.delete(id);
+  const wrow = w => {
+    const icon = `<span class="ic cat-gold">${ic("gift")}</span>`, text = `<div class="t"><b>${esc(w.title)}</b><small class="num">${coin(13)} ${w.cost} · ${w.who === "all" ? "всем" : esc(kidById(w.who)?.name || "")}</small></div>`;
+    if (wsel) { const on = wsel.has(w.id); return `<div class="row-edit trow pick ${on ? "on" : ""}" data-act="selTask" data-id="${w.id}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="pbox">${ic("check")}</span>${icon}${text}</div>`; }
+    return `<div class="srow" data-id="${w.id}"><button class="swipe-del" data-act="swipeDel" data-kind="wishes" data-id="${w.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit w">${icon}${text}<button class="btn sm ghost icon" data-act="wishForm" data-id="${w.id}" aria-label="Изменить: ${esc(w.title)}">${ic("pencil")}</button></div></div>`;
+  };
+  out += `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Магазин желаний</h2>${wsel ? `<span class="hint">выбрано ${wsel.size}</span>` : ""}</div>
+    ${wsel ? `<div class="btnrow"><button class="btn ghost" data-act="selAllW">${wishes.length && wishes.every(w => wsel.has(w.id)) ? "Снять все" : "Выбрать все"}</button></div>`
+      : `<div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}</div>`}
+    ${wishes.length ? `<div class="sortable">${wishes.map(wrow).join("")}</div>` : `<div class="empty">${ic("gift")}Магазин пуст. Добавьте награды из шаблонов или свою.</div>`}</section>`;
+  if (wsel) out += selBar(wsel);
   return out;
 }
 function photoLabel(d) { return { 7: "1 неделя", 14: "2 недели", 30: "1 месяц", 90: "3 месяца" }[d] || `${d} ${plural(d, "день", "дня", "дней")}`; }
@@ -854,7 +864,9 @@ function submitTask(t, entryId) {
   const lateInfo = !old && dl && dl.phase === "late" ? { late: true, latePct: dl.pct } : {};
   const mk = extra => ({ id: uid(), kid, type: "task", ref: t.id, title: t.title, pts: t.pts, day: s, at: Date.now(), checks: [], photos: [], resent: false, ...lateInfo, ...extra });
   const save = entry => S.be.putEntry(kid, entry.day.slice(0, 7), entry);
-  if (!t.checklist?.length && !t.photo && !old) { save(mk({})).then(() => toast("Отправлено на проверку")).catch(fail); return; }
+  if (!t.checklist?.length && !t.photo && !old) {
+    if (S.sending.has(t.id)) return; S.sending.add(t.id);
+    save(mk({})).then(() => toast("Отправлено на проверку")).catch(fail).finally(() => setTimeout(() => S.sending.delete(t.id), 800)); return; }
   const picked = [];
   modal(`<h2>${esc(t.title)}</h2>
     ${t.checklist?.length ? `<p class="hint">Отметь всё, что сделано:</p><div class="checks">${t.checklist.map((c, i) => `<label class="chk"><input type="checkbox" id="ck-${i}" data-c="${i}"> ${esc(c)}</label>`).join("")}</div>` : ""}
@@ -891,7 +903,7 @@ document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act, id = el.dataset.id;
   if (act === "closeModal") { if (e.target === el) closeModal(); return; }
-  if (act === "tab") { S.tab = id; S.setPage = null; S.sel = null; window.scrollTo(0, 0); render(); return; }
+  if (act === "tab") { S.tab = id; S.setPage = null; S.sel = null; S.selKind = null; window.scrollTo(0, 0); render(); return; }
   if (act === "setLang") {
     I18N.setLang(id);
     if (S.user && S.me && S.be && !S.be.demo) S.be.updateMember(S.user.uid, { lang: id }).catch(() => {});
@@ -902,8 +914,8 @@ document.addEventListener("click", e => {
   if (act === "goSet") { S.tab = "settings"; S.setPage = id || null; window.scrollTo(0, 0); render(); return; }
   if (act === "tplTasks") return taskTemplates();
   if (act === "tplWishes") return wishTemplates();
-  if (act === "swipeDel") { const t = S.cfg.tasks[id]; if (!t) return;
-    ask(`Удалить «${t.title}»?`, "Удалить", () => { swOpen = null; S.be.setFamily({ tasks: { [id]: { del: true } } }).then(() => toast("Дело удалено")).catch(fail); }, true); return; }
+  if (act === "swipeDel") { const kind = el.dataset.kind === "wishes" ? "wishes" : "tasks", t = S.cfg[kind]?.[id]; if (!t) return;
+    ask(`Удалить «${t.title}»?`, "Удалить", () => { swOpen = null; S.be.setFamily({ [kind]: { [id]: { del: true } } }).then(() => toast(kind === "wishes" ? "Награда удалена" : "Дело удалено")).catch(fail); }, true); return; }
   if (act === "delKid") { const k = kidById(id); if (!k) return;
     ask(`Удалить ребёнка «${k.name}»? Пропадут его личные дела и награды, а его аккаунт отключится от семьи. Общие дела останутся.`, "Удалить", async () => {
       try {
@@ -918,12 +930,14 @@ document.addEventListener("click", e => {
         toast(`${k.name}: удалено`);
       } catch (e) { fail(e); }
     }, true); return; }
-  if (act === "selMode") { S.sel = S.sel ? null : new Set(); render(); return; }
+  if (act === "selMode") { if (S.sel || !id) { S.sel = null; S.selKind = null; } else { S.sel = new Set(); S.selKind = id; } render(); return; }
   if (act === "selTask") { if (!S.sel) return; S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); render(); return; }
+  if (act === "selAllW") { if (!S.sel) return; const list = F.live(S.cfg.wishes); const all = list.every(w => S.sel.has(w.id)); list.forEach(w => all ? S.sel.delete(w.id) : S.sel.add(w.id)); render(); return; }
   if (act === "selAll") { if (!S.sel) return; const list = F.live(S.cfg.tasks).filter(t => F.category(t) === el.dataset.cat); const all = list.every(t => S.sel.has(t.id)); list.forEach(t => all ? S.sel.delete(t.id) : S.sel.add(t.id)); render(); return; }
   if (act === "selDel") { const ids = [...(S.sel || [])]; if (!ids.length) return;
-    ask(`Удалить выбранные дела (${ids.length})?`, "Удалить", () => { const map = {}; ids.forEach(i => { map[i] = { del: true }; }); S.sel = null;
-      S.be.setFamily({ tasks: map }).then(() => toast(`Удалено дел: ${ids.length}`)).catch(fail); }, true); return; }
+    const kind = S.selKind === "wishes" ? "wishes" : "tasks", what = kind === "wishes" ? "награды" : "дела";
+    ask(`Удалить выбранные ${what} (${ids.length})?`, "Удалить", () => { const map = {}; ids.forEach(i => { map[i] = { del: true }; }); S.sel = null; S.selKind = null;
+      S.be.setFamily({ [kind]: map }).then(() => toast(kind === "wishes" ? `Удалено наград: ${ids.length}` : `Удалено дел: ${ids.length}`)).catch(fail); }, true); return; }
   if (act === "taskToggle") { const t = S.cfg.tasks[id]; if (!t) return; const on = t.active === false;
     S.be.setFamily({ tasks: { [id]: { ...t, active: on, ...(on ? { since: today() } : {}) } } }).then(() => toast(on ? "Дело включено" : "Дело выключено")).catch(fail); return; }
   if (act === "allOff") { ask("Выключить все дела?", "Выключить", () => { const map = {}; F.live(S.cfg.tasks).forEach(t => { if (t.active !== false) map[t.id] = { ...t, active: false }; });
