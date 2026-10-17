@@ -103,6 +103,7 @@ var FQ = (function () {
       var e = doc.e || {};
       for (var k in e) {
         var x = e[k]; if (!x || !x.id) continue;
+        if (x.withdrawn) continue; // ребёнок отменил заявку
         var dec = (p.d || {})[x.id] || null;
         var status;
         if (x.type === "game") status = x.cancelled ? "no" : "ok";
@@ -156,7 +157,7 @@ var FQ = (function () {
       if (redoW) return { free: false, status: "redo", entry: redoW, count: rel.length, need: need };
       var okN = rel.filter(function (e) { return e.status === "ok"; }).length, pend = rel.filter(function (e) { return e.status === "pending"; }).length;
       if (rel.length < need) return { free: true, count: okN, pending: pend, need: need };
-      return { free: false, status: pend ? "pending" : "ok", count: okN, need: need };
+      return { free: false, status: pend ? "pending" : "ok", count: okN, need: need, entry: rel.filter(function (e) { return e.status === "pending"; }).slice(-1)[0] };
     }
     else if (freq === "once") rel = mine;
     else { // many
@@ -167,19 +168,27 @@ var FQ = (function () {
     if (!rel.length) return { free: true };
     var redo = rel.filter(function (e) { return e.status === "redo"; })[0];
     if (redo) return { free: false, status: "redo", entry: redo };
-    return { free: false, status: rel.some(function (e) { return e.status === "pending"; }) ? "pending" : "ok" };
+    var pe = rel.filter(function (e) { return e.status === "pending"; }).slice(-1)[0];
+    return { free: false, status: pe ? "pending" : "ok", entry: pe };
   }
 
   /* Сводка дня для календаря. */
   function daySummary(kid, s, data, cfg, todayS, now) {
-    var tasks = live(cfg.tasks).filter(function (t) { return forKid(t, kid); });
+    // Нет ребёнка — нет ни дел, ни пропусков.
+    var kidObj = (cfg.kids || []).filter(function (k) { return k.id === kid; })[0];
+    var tasks = kid && kidObj ? live(cfg.tasks).filter(function (t) { return forKid(t, kid); }) : [];
     var done = data.entries.filter(function (e) { return e.kid === kid && e.day === s && e.type === "task"; });
     var pts = 0; done.forEach(function (e) { if (e.status === "ok") pts += e.value; });
     var planned = tasks.filter(function (t) { return applies(t, s, cfg); });
     var missed = [];
+    // Пропуски считаются только с даты создания семьи и с даты включения дела.
+    var startDay = cfg.createdAt ? dayKey(new Date(cfg.createdAt)) : "";
+    if (kidObj && kidObj.since && kidObj.since > startDay) startDay = kidObj.since; // ребёнок добавлен позже
     if (s <= todayS) {
       planned.forEach(function (t) {
         if (!t.mandatory) return;
+        var from = t.since && t.since > startDay ? t.since : startDay;
+        if (from && s < from) return;
         if (s === todayS) { var dl = deadline(t, s, cfg, now); if (!dl || dl.phase !== "closed") return; }
         var ok = done.some(function (e) { return e.ref === t.id && e.status !== "no"; });
         if (!ok) missed.push(t);
@@ -197,6 +206,7 @@ var FQ = (function () {
     taskState: taskState, daySummary: daySummary
   };
 })();
+if (typeof module !== "undefined") module.exports = FQ;
 
 /* ===== Семейные квесты — серверная часть (Google Apps Script) =====
    Каждые 5 минут: напоминания об обязательных делах, вечернее зачисление,
@@ -329,6 +339,14 @@ function aiCheck(e, task, kid, photos) {
     var v = ["ok", "redo", "unsure"].indexOf(res.verdict) >= 0 ? res.verdict : "unsure";
     return { verdict: v, comment: String(res.comment || "").slice(0, 300) };
   } catch (err) { console.error("Gemini parse " + err); return null; }
+}
+
+/** Проверка ключа Gemini: выберите testAI и нажмите «Выполнить». */
+function testAI() {
+  if (!prop("GEMINI_KEY")) { console.log("Нет свойства GEMINI_KEY"); return; }
+  var img = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCABAAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD06iiiuU2CisXxF4i/sD7P/on2jz93/LTbtxj2PrWL/wALE/6hX/kx/wDY1108FXqxU4Run5oylVhF2bO0ori/+Fif9Qr/AMmP/saP+Fif9Qr/AMmP/sa0/s7Ffy/iv8yfb0+52lFZnh/Wv7dsXuvs/kbJTHt37s4AOc4HrWnXHOEqcnGW6NU1JXQUUUVBQUUUUAFFFZ134h0qxuXtrm62SpjcvlscZGeoHoaG0twSb2Oc+In/ADDv+2v/ALJXFV1PjTVbLVfsX2KYzeV5m/5GGM7cdR7GuX2N/dP5V9Rl9WCw0U5Lr+bPOrwl7R6CUUuxv7p/KjY390/lXd7Wn/MvvMeSXY9B8Af8gKb/AK+W/wDQVrp64nwfrWn6ZpMsF5ceVI05cLsY8bVHYexrf/4SzRP+f3/yE/8AhXyWMnF4idn1PUpRlyLQ16KyP+Es0T/n9/8AIT/4Uf8ACWaJ/wA/v/kJ/wDCuXmXc05X2NeisuHxNo9xNHDFebpJGCqPLcZJOB2rUppp7Caa3CvOPFn/ACMt3/wD/wBAWvR6848Wf8jLd/8AAP8A0Bazq7GlL4jHooornOgKKKKACiiigAooooAuaP8A8hqx/wCvmP8A9CFep15Zo/8AyGrH/r5j/wDQhXqdb0tjCrugrzjxZ/yMt3/wD/0Ba9HrF1DwpYalfSXk0twskmMhGUDgAdx7VU4trQmElF6nnVFd5/wg2mf897v/AL7X/wCJo/4QbTP+e93/AN9r/wDE1l7ORr7SJwdFd5/wg2mf897v/vtf/iaP+EG0z/nvd/8Afa//ABNHs5B7SJwdFd5/wg2mf897v/vtf/iaP+EG0z/nvd/99r/8TR7OQe0icHRXef8ACDaZ/wA97v8A77X/AOJo/wCEG0z/AJ73f/fa/wDxNHs5B7SJx+j/APIasf8Ar5j/APQhXqdYFt4N061uorhJrkvE4dQzLgkHPPy1v1rCLS1MpyUnof/Z";
+  var r = aiCheck({ title: "Убрать на столе", checks: ["Стол разобран"] }, null, { age: 10 }, [img]);
+  console.log(r ? "Gemini отвечает (" + prop("GEMINI_MODEL", "gemini-3.5-flash-lite") + "): " + JSON.stringify(r) : "Gemini не ответил — см. ошибку выше");
 }
 
 /* ---------- Обработка семьи ---------- */
