@@ -150,7 +150,7 @@
     "Сколько баллов": "Points", "Например: Спасибо, что помог бабушке!": "For example: Thanks for helping Grandma!", "Подарить": "Gift",
     "Бонус или списание без поздравления": "Bonus or deduction without a message", "Баллы (минус — списать)": "Points (minus to deduct)",
     "Укажите баллы": "Enter points", "Своя награда": "Custom reward",
-    "Магазин пуст. Добавьте награды из шаблонов или свою.": "The shop is empty. Add rewards from templates or your own.",
+    "Магазин пуст. Добавьте награды из шаблонов или свою.": "The shop is empty. Add rewards from templates or your own.", "Магазин пуст": "The shop is empty", "Выберите готовые награды из шаблонов или создайте свои.": "Pick ready-made rewards from templates or create your own.", "Дети обменивают на них баллы. Цена — в баллах.": "Children exchange points for these. Prices are in points.",
     "Новое желание": "New wish", "Изменить желание": "Edit wish", "Награда": "Reward", "Цена в баллах": "Price in points", "Желание сохранено": "Wish saved",
     "всем": "everyone", "Заявка на награду отклонена": "Reward request declined",
     // настройки
@@ -225,6 +225,7 @@
     [/^включено (\d+) из (\d+)$/, function (a, b) { return a + " of " + b + " on"; }],
     [/^осталось (\d+)$/, function (n) { return n + " left"; }],
     [/^осталось (\d+) мин$/, function (n) { return n + " min left"; }],
+    [/^наград: (\d+)$/, function (n) { return pl(n, "reward", "rewards"); }],
     [/^выбрано (\d+)$/, function (n) { return n + " selected"; }],
     [/^(\d+) из (\d+)$/, function (a, b) { return a + " of " + b; }],
     [/^(\d+) из (\d+) на неделе$/, function (a, b) { return a + " of " + b + " this week"; }],
