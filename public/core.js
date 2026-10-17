@@ -168,13 +168,16 @@ var FQ = (function () {
 
   /* Сводка дня для календаря. */
   function daySummary(kid, s, data, cfg, todayS, now) {
-    var tasks = live(cfg.tasks).filter(function (t) { return forKid(t, kid); });
+    // Нет ребёнка — нет ни дел, ни пропусков.
+    var kidObj = (cfg.kids || []).filter(function (k) { return k.id === kid; })[0];
+    var tasks = kid && kidObj ? live(cfg.tasks).filter(function (t) { return forKid(t, kid); }) : [];
     var done = data.entries.filter(function (e) { return e.kid === kid && e.day === s && e.type === "task"; });
     var pts = 0; done.forEach(function (e) { if (e.status === "ok") pts += e.value; });
     var planned = tasks.filter(function (t) { return applies(t, s, cfg); });
     var missed = [];
     // Пропуски считаются только с даты создания семьи и с даты включения дела.
     var startDay = cfg.createdAt ? dayKey(new Date(cfg.createdAt)) : "";
+    if (kidObj && kidObj.since && kidObj.since > startDay) startDay = kidObj.since; // ребёнок добавлен позже
     if (s <= todayS) {
       planned.forEach(function (t) {
         if (!t.mandatory) return;
