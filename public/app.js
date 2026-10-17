@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.6.3", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.6.4", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -648,7 +648,7 @@ function parentRewards() {
     <div><button class="btn go">Подарить</button></div></form>
     <details><summary>Бонус или списание без поздравления</summary><form class="grid" data-form="bonus"><label>Кому<select id="b-kid" name="kid">${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("")}</select></label>
     <label>Баллы (минус — списать)<input id="b-pts" name="pts" type="number" inputmode="numeric" value="-10" required></label><label class="full">Причина<input id="b-why" name="why" required></label><div><button class="btn dark">Применить</button></div></form></details></section>`;
-  let out = "";
+  let out = giftCard;
   const wishes = F.live(S.cfg.wishes);
   const wsel = S.selKind === "wishes" ? S.sel : null;
   if (wsel) for (const id of [...wsel]) if (!S.cfg.wishes[id] || S.cfg.wishes[id].del) wsel.delete(id);
@@ -662,12 +662,12 @@ function parentRewards() {
   if (!wsel) out += `<section class="card"><div class="card-head"><h2>${ic("gift", "h")} Магазин желаний</h2><span class="hint">${wishes.length ? `наград: ${wishes.length}` : "список пуст"}</span></div>
     <div class="btnrow"><button class="btn go" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}${wishes.length > 1 ? `<button class="btn ghost" data-act="sortWishes">${ic("coins")} По цене</button>` : ""}</div>
     <p class="hint">Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке награды увидят дети. Удалить награду — смахните её влево.</p></section>`;
-  if (!wishes.length) return out + `<div class="empty big">${ic("gift")}<b>Магазин пуст</b><span>Выберите готовые награды из шаблонов или создайте свои.</span><button class="btn go" data-act="tplWishes">${ic("layers")} Открыть шаблоны</button></div>` + giftCard;
+  if (!wishes.length) return out + `<div class="empty big">${ic("gift")}<b>Магазин пуст</b><span>Выберите готовые награды из шаблонов или создайте свои.</span><button class="btn go" data-act="tplWishes">${ic("layers")} Открыть шаблоны</button></div>`;
   out += `<section class="card"><div class="card-head"><h2>Награды</h2>${wsel ? `<button class="btn sm ghost" data-act="selAllW">${wishes.every(w => wsel.has(w.id)) ? "Снять" : "Все"}</button>` : ""}</div>
     <p class="hint">Дети обменивают на них баллы. Цена — в баллах.</p>
     <div class="sortable" data-kind="wishes">${wishes.map(wrow).join("")}</div></section>`;
   if (wsel) out += selBar(wsel);
-  return out + giftCard;
+  return out;
 }
 function photoLabel(d) { return { 7: "1 неделя", 14: "2 недели", 30: "1 месяц", 90: "3 месяца" }[d] || `${d} ${plural(d, "день", "дня", "дней")}`; }
 function langOptions() {
