@@ -39,7 +39,7 @@ function processSupport() {
       "Язык: " + (r.lang || "ru") + " · версия приложения " + (r.app || "") + "\nОтправлено: " + new Date(r.at).toLocaleString("ru-RU", { timeZone: "Europe/Minsk" });
     var opt = { name: "Family Quests", noReply: false };
     if (r.email) opt.replyTo = r.email;
-    MailApp.sendEmail(to, "[Family Quests] " + String(r.subject).slice(0, 120), body, opt);
+    MailApp.sendEmail(to, "FamilyQuests: " + String(r.subject).slice(0, 120), body, opt);
     fsPatch("support/" + r.id, { sentAt: Date.now() }, ["sentAt"]);
   });
 }
