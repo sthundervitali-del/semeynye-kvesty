@@ -257,12 +257,15 @@ function processSupport() {
   fsList("support").forEach(function (r) {
     var th = r.thread || [{ from: "user", text: r.text || "", at: r.at }];
     var last = th[th.length - 1] || {};
-    if (last.from === "user" && to && last.at > (r.mailedAt || 0) && sent < 10) {
+    var lastUser = th.filter(function (x) { return x.from === "user"; }).slice(-1)[0];
+    if (lastUser && to && lastUser.at > (r.mailedAt || 0) && sent < 10) { // письмо о каждом новом сообщении пользователя, даже если вы уже ответили в приложении
+      last = lastUser;
       var body = (th.length > 1 ? "Новое сообщение в запросе" : "Новый запрос") + " от " + (r.name || "") + " <" + (r.email || "") + ">, семья «" + (r.family || "") + "».\n\n" +
         last.text + "\n\n— — —\nОтветить можно в приложении: Настройки → Администрирование → Запросы пользователей.\n" + (prop("APP_URL", "") || "");
       MailApp.sendEmail(to, "FamilyQuests: " + String(r.subject).slice(0, 120) + (th.length > 1 ? " (новое сообщение)" : ""), body, { name: "Family Quests" });
       fsPatch("support/" + r.id, { mailedAt: Date.now() }, ["mailedAt"]); sent++;
     }
+    last = th[th.length - 1] || {};
     if (last.from === "support" && last.at > (r.notifiedAt || 0)) {
       var m = r.fid && r.uid ? fsGet("families/" + r.fid + "/members/" + r.uid) : null;
       if (m) push(m, r.fid, isEn(m) ? "💬 Support replied" : "💬 Ответ поддержки", String(r.subject).slice(0, 80));
