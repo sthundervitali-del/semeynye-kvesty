@@ -406,3 +406,4 @@ details[open] summary{margin-bottom:8px}
 .srow{overflow-x:clip}
 .srow>.row-edit{margin:0;padding:10px 0}
 .srow .swipe-del{right:0}
+.iw{display:flex;flex-direction:column;gap:12px}
