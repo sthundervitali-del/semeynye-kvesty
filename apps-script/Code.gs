@@ -212,7 +212,7 @@ if (typeof module !== "undefined") module.exports = FQ;
    Каждые 5 минут: напоминания об обязательных делах, вечернее зачисление,
    уведомления родителям о заявках, подарки,
    ИИ-проверка фото через Gemini.
-   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL, SUPPORT_EMAIL. */
+   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL, SUPPORT_EMAIL, ADMIN_UID. */
 
 var P = PropertiesService.getScriptProperties();
 function prop(k, d) { return P.getProperty(k) || d; }
@@ -239,18 +239,28 @@ function tick() {
 }
 
 /* ---------- Поддержка ----------
-   Родители пишут запрос в приложении (коллекция support). Сервер пересылает его письмом
-   на адрес из свойства SUPPORT_EMAIL — пользователи этот адрес не видят. Ответ — на почту родителя (Reply-To). */
+   Переписка идёт внутри приложения (коллекция support). Сервер:
+   — назначает администратора поддержки по свойству ADMIN_UID (документ admins/{uid});
+   — пишет на SUPPORT_EMAIL короткое уведомление о новом сообщении пользователя (адрес пользователям не виден);
+   — присылает родителю пуш, когда поддержка ответила. */
 function processSupport() {
-  var to = prop("SUPPORT_EMAIL"); if (!to) return;
-  var list = fsList("support").filter(function (r) { return !r.sentAt; }).slice(0, 10);
-  list.forEach(function (r) {
-    var body = "Тема: " + r.subject + "\n\n" + r.text + "\n\n— — —\nОт: " + (r.name || "") + " <" + (r.email || "") + ">\nСемья: " + (r.family || "") + " (" + r.fid + ")\n" +
-      "Язык: " + (r.lang || "ru") + " · версия приложения " + (r.app || "") + "\nОтправлено: " + new Date(r.at).toLocaleString("ru-RU", { timeZone: "Europe/Minsk" });
-    var opt = { name: "Family Quests", noReply: false };
-    if (r.email) opt.replyTo = r.email;
-    MailApp.sendEmail(to, "FamilyQuests: " + String(r.subject).slice(0, 120), body, opt);
-    fsPatch("support/" + r.id, { sentAt: Date.now() }, ["sentAt"]);
+  var adminUid = prop("ADMIN_UID");
+  if (adminUid && prop("ADMIN_DONE") !== adminUid) { if (fsPatch("admins/" + adminUid, { at: Date.now() }, ["at"])) P.setProperty("ADMIN_DONE", adminUid); }
+  var to = prop("SUPPORT_EMAIL"), sent = 0;
+  fsList("support").forEach(function (r) {
+    var th = r.thread || [{ from: "user", text: r.text || "", at: r.at }];
+    var last = th[th.length - 1] || {};
+    if (last.from === "user" && to && last.at > (r.mailedAt || 0) && sent < 10) {
+      var body = (th.length > 1 ? "Новое сообщение в запросе" : "Новый запрос") + " от " + (r.name || "") + " <" + (r.email || "") + ">, семья «" + (r.family || "") + "».\n\n" +
+        last.text + "\n\n— — —\nОтветить можно в приложении: Настройки → Администрирование → Запросы пользователей.\n" + (prop("APP_URL", "") || "");
+      MailApp.sendEmail(to, "FamilyQuests: " + String(r.subject).slice(0, 120) + (th.length > 1 ? " (новое сообщение)" : ""), body, { name: "Family Quests" });
+      fsPatch("support/" + r.id, { mailedAt: Date.now() }, ["mailedAt"]); sent++;
+    }
+    if (last.from === "support" && last.at > (r.notifiedAt || 0)) {
+      var m = r.fid && r.uid ? fsGet("families/" + r.fid + "/members/" + r.uid) : null;
+      if (m) push(m, r.fid, isEn(m) ? "💬 Support replied" : "💬 Ответ поддержки", String(r.subject).slice(0, 80));
+      fsPatch("support/" + r.id, { notifiedAt: Date.now() }, ["notifiedAt"]);
+    }
   });
 }
 

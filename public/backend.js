@@ -75,8 +75,15 @@ export async function firebaseBackend() {
     async oldPhotos(before) { const s = await getDocs(collection(db, "families", fid, "photos")); return s.docs.filter(d => (d.data().at || 0) < before).map(d => d.id); },
     updateMember: (u, patch) => setDoc(fam("members", u), patch, { merge: true }),
     removeMember: u => deleteDoc(fam("members", u)),
-    sendSupport: (user, req) => { const id = uid("s"); return setDoc(doc(db, "support", id), { ...req, id, uid: user.uid, email: user.email || "", name: user.displayName || "", fid, at: Date.now() }); },
-    mySupport: async user => (await getDocs(query(collection(db, "support"), where("uid", "==", user.uid)))).docs.map(d => d.data()).sort((a, b) => b.at - a.at),
+    isAdmin: async user => { try { return (await getDoc(doc(db, "admins", user.uid))).exists(); } catch (_) { return false; } },
+    watchSupport: (user, admin, cb) => onSnapshot(admin ? collection(db, "support") : query(collection(db, "support"), where("uid", "==", user.uid)),
+      s => cb(s.docs.map(d => d.data())), e => console.warn("support", e)),
+    sendSupport: (user, req) => { const id = uid("s"), at = Date.now();
+      return setDoc(doc(db, "support", id), { id, uid: user.uid, email: user.email || "", name: user.displayName || "", fid, family: req.family || "", subject: req.subject,
+        lang: req.lang || "ru", app: req.app || "", status: "open", thread: [{ from: "user", text: req.text, at }], at, updatedAt: at, userSeenAt: at }); },
+    supportMsg: (id, from, text) => { const at = Date.now();
+      return setDoc(doc(db, "support", id), { thread: arrayUnion({ from, text, at }), status: from === "user" ? "open" : "answered", updatedAt: at, [from === "user" ? "userSeenAt" : "adminSeenAt"]: at }, { merge: true }); },
+    supportSeen: (id, admin) => setDoc(doc(db, "support", id), { [admin ? "adminSeenAt" : "userSeenAt"]: Date.now() }, { merge: true }),
     /** Полное удаление семьи: все записи, фото, участники и сама семья. */
     async deleteFamily(user) {
       const wipe = async refs => {
@@ -161,8 +168,11 @@ export function demoBackend(seedFn) {
     putPhoto: async (id, d) => { store.photos[id] = d; }, getPhoto: async id => store.photos[id]?.data || null, delPhoto: async () => {}, oldPhotos: async () => [],
     updateMember: async (u, p) => { store.members[u] = deepMerge(store.members[u] || {}, p); later(); },
     removeMember: async u => { delete store.members[u]; later(); },
-    sendSupport: async (user, req) => { (store.support = store.support || []).unshift({ ...req, id: uid("s"), uid: user.uid, at: Date.now() }); },
-    mySupport: async () => (store.support || []).slice(),
+    isAdmin: async () => true,
+    watchSupport: (user, admin, cb) => { const fire = () => cb((store.support || []).map(r => ({ ...r, thread: r.thread.slice() }))); store.supportCb = fire; fire(); return () => { store.supportCb = null; }; },
+    sendSupport: async (user, req) => { const at = Date.now(); (store.support = store.support || []).unshift({ id: uid("s"), uid: user.uid, email: user.email, name: user.displayName, family: req.family, subject: req.subject, status: "open", thread: [{ from: "user", text: req.text, at }], at, updatedAt: at, userSeenAt: at }); store.supportCb?.(); },
+    supportMsg: async (id, from, text) => { const r = (store.support || []).find(x => x.id === id); if (!r) return; const at = Date.now(); r.thread.push({ from, text, at }); r.status = from === "user" ? "open" : "answered"; r.updatedAt = at; r[from === "user" ? "userSeenAt" : "adminSeenAt"] = at; store.supportCb?.(); },
+    supportSeen: async (id, admin) => { const r = (store.support || []).find(x => x.id === id); if (r) { r[admin ? "adminSeenAt" : "userSeenAt"] = Date.now(); store.supportCb?.(); } },
     createInvite: async () => code8(),
     deleteFamily: async () => { throw new Error("В демо-режиме семью удалить нельзя."); },
     enablePush: async () => { throw new Error("В демо-режиме уведомления не подключаются."); }, resumePush: async () => {},

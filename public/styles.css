@@ -413,3 +413,11 @@ details[open] summary{margin-bottom:8px}
 form.grid>*,.grid>*,label{min-width:0}
 input[type=time],input[type=date],input[type=datetime-local]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;min-height:44px;text-align:left}
 input[type=time]::-webkit-date-and-time-value,input[type=date]::-webkit-date-and-time-value{text-align:left}
+/* переписка с поддержкой */
+.msgs{display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;align-self:flex-start;background:var(--bg-2);border:1px solid var(--line);border-radius:16px 16px 16px 6px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.msg.me{align-self:flex-end;background:color-mix(in srgb,var(--gold) 14%,var(--surface));border-color:color-mix(in srgb,var(--gold) 35%,var(--line));border-radius:16px 16px 6px 16px}
+.msg .who{color:var(--muted);font-size:11.5px;font-weight:700}
+.msg .txt{font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.set-row .pill{justify-self:end}
+.set-row .st{margin-top:4px;display:flex}

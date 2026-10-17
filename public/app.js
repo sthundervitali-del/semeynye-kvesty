@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.7.0", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.8.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -31,7 +31,7 @@ const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localSt
 const S = {
   be: null, user: null, families: [], fid: null, cfg: null, members: [], kidlogs: [], plogs: [],
   data: { entries: [], gifts: [] }, me: null, loaded: false, tab: null, preview: null,
-  calMonth: F.monthKey(), calKid: null, sel: null, selKind: null, sending: new Set(), drag: false, selDay: null, photos: {}, error: null, prevStatus: null, setPage: null,
+  calMonth: F.monthKey(), calKid: null, support: [], isAdmin: false, sel: null, selKind: null, sending: new Set(), drag: false, selDay: null, photos: {}, error: null, prevStatus: null, setPage: null,
 };
 const isParent = () => S.me?.role === "parent";
 const kidsList = () => S.cfg?.kids || [];
@@ -220,7 +220,7 @@ function render() {
     : [["review", "inbox", "Проверка"], ["cal", "calendar", "Календарь"], ["tasks", "checklist", "Дела"], ["rewards", "gift", "Награды"], ["settings", "sliders", "Настройки"]];
   if (!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
   const pend = pendingList().length;
-  let html = `<nav class="nav" aria-label="Разделы"><div class="nav-in">${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="ico">${ic(i)}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}</span><span class="lbl">${n}</span></button>`).join("")}</div></nav><div class="wrap">`;
+  let html = `<nav class="nav" aria-label="Разделы"><div class="nav-in">${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="ico">${ic(i)}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}${id === "settings" && supportBadge() ? `<span class="badge">${supportBadge()}</span>` : ""}</span><span class="lbl">${n}</span></button>`).join("")}</div></nav><div class="wrap">`;
   html += topBar();
   if (kidMode) {
     const k = kidById(viewingKid());
@@ -531,14 +531,36 @@ function parentTasks() {
   if (sel) out += selBar(sel);
   return out;
 }
-async function loadSupport() {
-  const box = document.getElementById("sp-list"); if (!box || !S.be?.mySupport) return;
-  try {
-    const list = await S.be.mySupport(S.user);
-    box.innerHTML = list.length ? `<div class="list">${list.slice(0, 20).map(r => `<div class="it"><span><b>${esc(r.subject)}</b><br><small>${fmtDate(r.at)}</small></span><span class="pill ${r.sentAt ? "ok" : "wait"}">${r.sentAt ? "отправлен" : "в очереди"}</span><span></span></div>`).join("")}</div>`
-      : `<div class="empty slim">Вы ещё не писали в поддержку.</div>`;
-  } catch (e) { box.innerHTML = `<div class="empty slim">Не удалось загрузить список.</div>`; }
-  I18N.apply(box);
+/* ---------- поддержка: переписка внутри приложения ---------- */
+const thr = r => r.thread || [{ from: "user", text: r.text || "", at: r.at }];
+const lastOf = r => { const t = thr(r); return t[t.length - 1] || {}; };
+const userUnread = r => lastOf(r).from === "support" && lastOf(r).at > (r.userSeenAt || 0);
+const adminUnread = r => lastOf(r).from === "user" && lastOf(r).at > (r.adminSeenAt || 0);
+const mySupport = () => (S.support || []).filter(r => r.uid === S.user?.uid).sort((a, b) => (b.updatedAt || b.at) - (a.updatedAt || a.at));
+const supportBadge = () => isParent() ? mySupport().filter(userUnread).length + (S.isAdmin ? (S.support || []).filter(r => r.uid !== S.user.uid && adminUnread(r)).length : 0) : 0;
+let stopSupport = () => {};
+function startSupport() {
+  stopSupport(); S.support = []; S.isAdmin = false;
+  if (!isParent() || !S.be.watchSupport) return;
+  S.be.isAdmin(S.user).then(a => { S.isAdmin = a; stopSupport = S.be.watchSupport(S.user, a, list => { S.support = list; rerender(); }); }).catch(() => {});
+}
+function supStatus(r, admin) {
+  if (admin ? adminUnread(r) : userUnread(r)) return `<span class="pill no">${admin ? "ждёт ответа" : "новый ответ"}</span>`;
+  return lastOf(r).from === "support" ? `<span class="pill ok">есть ответ</span>` : `<span class="pill wait">${admin ? "ждёт ответа" : "ждёт ответа поддержки"}</span>`;
+}
+function supRow(r, admin) {
+  return `<button class="set-row" data-act="setPage" data-id="${admin ? "adm:" : "sup:"}${r.id}"><span class="tile ${(admin ? adminUnread(r) : userUnread(r)) ? "c-gold" : "c-gray"}">${ic("inbox")}</span>
+    <span class="t"><b>${esc(r.subject)}</b><small>${admin ? esc((r.name || r.email || "") + " · " + (r.family || "")) + " · " : ""}${fmtDate(r.updatedAt || r.at)}</small><span class="st">${supStatus(r, admin)}</span></span>${ic("chev-r", "chev")}</button>`;
+}
+function supThread(r, admin) {
+  const msgs = thr(r).map(m => { const mine = admin ? m.from === "support" : m.from === "user";
+    return `<div class="msg ${mine ? "me" : ""}"><small class="who">${m.from === "support" ? "Поддержка Family Quests" : admin ? esc(r.name || r.email || "Пользователь") : "Вы"} · ${fmtDate(m.at)}</small><div class="txt">${esc(m.text).replace(/\n/g, "<br>")}</div></div>`; }).join("");
+  if (admin ? adminUnread(r) : userUnread(r)) setTimeout(() => S.be.supportSeen(r.id, admin).catch(() => {}), 600);
+  return `<section class="card"><div class="card-head"><h2>${esc(r.subject)}</h2>${supStatus(r, admin)}</div>
+    ${admin ? `<p class="hint">${esc(r.name || "")} · ${esc(r.email || "")} · семья «${esc(r.family || "")}» · версия ${esc(r.app || "?")} · язык ${esc(r.lang || "ru")}</p>` : ""}
+    <div class="msgs">${msgs}</div>
+    <form class="grid" data-form="sup-reply" data-sid="${r.id}" data-admin="${admin ? 1 : ""}"><label class="full">${admin ? "Ответ пользователю" : "Дописать в запрос"}<textarea id="sr-text" name="text" maxlength="4000" required rows="4" placeholder="${admin ? "Ваш ответ увидит только автор запроса." : "Уточнение или новый вопрос по этой теме."}"></textarea></label>
+    <div class="full"><button class="btn go">${ic("inbox")} Отправить</button></div></form></section>`;
 }
 function selBar(sel) { return `<div class="selbar"><button class="btn ghost" data-act="selMode">Отмена</button><button class="btn no" data-act="selDel" ${sel.size ? "" : "disabled"}>${ic("trash")} Удалить (${sel.size})</button></div><div class="selbar-pad"></div>`; }
 /* Свайп влево по делу — кнопка «Удалить», как в iPhone. */
@@ -705,8 +727,11 @@ function parentSettings() {
       ${row("lang", "globe", "blue", "Язык", I18N.lang() === "en" ? "English" : "Русский")}
     </div></div>
     <div class="set-group"><h3>Помощь</h3><div class="set-list">
-      ${row("support", "inbox", "green", "Написать в поддержку", "Вопрос, ошибка или идея — ответим на вашу почту")}
+      ${row("support", "inbox", "green", "Поддержка", mySupport().some(userUnread) ? "Есть новый ответ" : "Вопрос, ошибка или идея — ответим здесь, в приложении")}
     </div></div>
+    ${S.isAdmin ? `<div class="set-group"><h3>Администрирование</h3><div class="set-list">
+      ${row("admin-support", "inbox", "gold", "Запросы пользователей", (() => { const n = (S.support || []).filter(adminUnread).length; return n ? `ждут ответа: ${n}` : "новых нет"; })())}
+    </div></div>` : ""}
     <div class="set-group"><h3>Аккаунт</h3><div class="set-list">
       ${S.families.length > 1 ? `<button class="set-row" data-act="switchFamily"><span class="tile c-gray">${ic("users")}</span><span class="t"><b>Сменить семью</b><small>У вас ${S.families.length} ${plural(S.families.length, "семья", "семьи", "семей")}</small></span>${ic("chev-r", "chev")}</button>` : ""}
       <button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти из аккаунта</b><small>${esc(S.user.email || "")}</small></span></button>
@@ -751,15 +776,23 @@ function settingsPage(p) {
       <p class="hint">На iPhone сначала добавьте приложение на экран «Домой»: «Поделиться» → «На экран „Домой“».</p>
       <div class="btnrow"><button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button><button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
   if (p === "lang") return head("Язык") + `<section class="card">${langOptions()}<p class="hint">Язык меняется только на этом устройстве. Уведомления на телефон тоже придут на выбранном языке.</p></section>`;
+  const sub = (title, back) => `<div class="sub-head"><button class="btn ghost icon" data-act="setPage" data-id="${back}" aria-label="Назад">${ic("chev-l")}</button><h2>${title}</h2></div>`;
   if (p === "support") {
-    setTimeout(loadSupport, 0);
-    return head("Поддержка") + `<section class="card"><form class="grid" data-form="support">
+    const mine = mySupport();
+    return head("Поддержка") + `<section class="card"><h2>${ic("plus", "h")} Новый запрос</h2><form class="grid" data-form="support">
       <label class="full">Тема<input id="sp-subj" name="subj" maxlength="120" required placeholder="Например: не приходят уведомления"></label>
-      <label class="full">Описание<textarea id="sp-text" name="text" maxlength="4000" required rows="6" placeholder="Опишите, что произошло: что вы делали, что ожидали и что получилось. Укажите телефон и браузер, если это ошибка."></textarea></label>
+      <label class="full">Описание<textarea id="sp-text" name="text" maxlength="4000" required rows="5" placeholder="Опишите, что произошло: что вы делали, что ожидали и что получилось. Укажите телефон и браузер, если это ошибка."></textarea></label>
       <div class="full"><button class="btn go">${ic("inbox")} Отправить</button></div></form>
-      <p class="hint">Ответ придёт на ${esc(S.user.email || "вашу почту")}. Вместе с запросом передаются название семьи и ваш адрес.</p></section>
-      <section class="card"><h2>${ic("history", "h")} Мои запросы</h2><div id="sp-list"><div class="empty slim">Загрузка…</div></div></section>`;
+      <p class="hint">Ответ появится здесь, в приложении, и придёт уведомлением на телефон.</p></section>
+      <div class="set-group"><h3>Мои запросы</h3>${mine.length ? `<div class="set-list">${mine.map(r => supRow(r, false)).join("")}</div>` : `<div class="empty slim">Вы ещё не писали в поддержку.</div>`}</div>`;
   }
+  if (p.startsWith("sup:")) { const r = mySupport().find(x => x.id === p.slice(4)); return sub("Запрос в поддержку", "support") + (r ? supThread(r, false) : `<div class="empty">Загрузка…</div>`); }
+  if (p === "admin-support" && S.isAdmin) {
+    const all = (S.support || []).slice().sort((a, b) => (adminUnread(b) - adminUnread(a)) || ((b.updatedAt || b.at) - (a.updatedAt || a.at)));
+    return head("Запросы пользователей") + `<p class="hint">Вы видите запросы всех семей как администратор поддержки. Пользователи видят ответы от имени «Поддержка Family Quests» — ваш адрес им не показывается.</p>
+      ${all.length ? `<div class="set-list">${all.map(r => supRow(r, true)).join("")}</div>` : `<div class="empty">Запросов пока нет.</div>`}`;
+  }
+  if (p.startsWith("adm:") && S.isAdmin) { const r = (S.support || []).find(x => x.id === p.slice(4)); return sub("Запрос пользователя", "admin-support") + (r ? supThread(r, true) : `<div class="empty">Загрузка…</div>`); }
   if (p === "danger") return head("Удалить семью") + `<section class="card danger-card"><div class="state">${ic("trash", "h")} <b>Это действие нельзя отменить</b></div>
       <p>Будут удалены все дела, награды, баллы, история, фото и участники семьи «${esc(S.cfg.name || "")}». У второго родителя и детей семья тоже пропадёт.</p>
       <form class="grid" data-form="delFamily"><label class="full">Чтобы подтвердить, введите название семьи<input id="del-name" name="name" autocomplete="off" placeholder="${esc(S.cfg.name || "")}"></label>
@@ -1072,8 +1105,14 @@ document.addEventListener("submit", e => {
     const last = +lsGet("fq-sp-last") || 0; if (Date.now() - last < 60e3) return toast("Подождите минуту перед следующим запросом");
     const btn = f.querySelector("button"); btn.disabled = true;
     S.be.sendSupport(S.user, { subject, text, family: S.cfg?.name || "", lang: I18N.lang(), app: APP_VERSION })
-      .then(() => { lsSet("fq-sp-last", String(Date.now())); f.reset(); toast("Запрос отправлен в поддержку"); loadSupport(); })
+      .then(() => { lsSet("fq-sp-last", String(Date.now())); f.reset(); toast("Запрос отправлен в поддержку"); })
       .catch(fail).finally(() => { btn.disabled = false; });
+    return;
+  }
+  if (kind === "sup-reply") {
+    const text = f.text.value.trim().slice(0, 4000); if (!text) return;
+    const btn = f.querySelector("button"); btn.disabled = true;
+    S.be.supportMsg(f.dataset.sid, f.dataset.admin ? "support" : "user", text).then(() => { f.reset(); toast(f.dataset.admin ? "Ответ отправлен" : "Сообщение отправлено"); }).catch(fail).finally(() => { btn.disabled = false; });
     return;
   }
   if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00" } }).then(saved).catch(fail);
@@ -1103,7 +1142,7 @@ function openFamily(fid) {
   if (!S.families.includes(fid)) S.families.push(fid);
   S.be.use(fid); render();
   let got = { family: false, members: false, kidlog: false, plog: false };
-  const ready = () => { if (Object.values(got).every(Boolean)) { S.loaded = true; recompute(); rerender(); } };
+  const ready = () => { if (Object.values(got).every(Boolean) && !S.loaded) { S.loaded = true; recompute(); rerender(); startSupport(); } };
   stopWatch = S.be.watch({
     family: d => { S.cfg = d; got.family = true; if (got.kidlog) recompute(); ready(); if (S.loaded) rerender(); },
     members: list => { S.members = list; S.me = list.find(m => m.uid === S.user.uid) || null; got.members = true;
