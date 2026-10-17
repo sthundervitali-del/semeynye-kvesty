@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.8.0", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.8.1", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -539,10 +539,11 @@ const adminUnread = r => lastOf(r).from === "user" && lastOf(r).at > (r.adminSee
 const mySupport = () => (S.support || []).filter(r => r.uid === S.user?.uid).sort((a, b) => (b.updatedAt || b.at) - (a.updatedAt || a.at));
 const supportBadge = () => isParent() ? mySupport().filter(userUnread).length + (S.isAdmin ? (S.support || []).filter(r => r.uid !== S.user.uid && adminUnread(r)).length : 0) : 0;
 let stopSupport = () => {};
+window.__fqState = () => ({ parent: isParent(), admin: S.isAdmin, support: (S.support || []).length, loaded: S.loaded, started: !!S._supStarted, err: S._supErr || null });
 function startSupport() {
-  stopSupport(); S.support = []; S.isAdmin = false;
+  S._supStarted = Date.now(); stopSupport(); S.support = []; S.isAdmin = false;
   if (!isParent() || !S.be.watchSupport) return;
-  S.be.isAdmin(S.user).then(a => { S.isAdmin = a; stopSupport = S.be.watchSupport(S.user, a, list => { S.support = list; rerender(); }); }).catch(() => {});
+  S.be.isAdmin(S.user).then(a => { S.isAdmin = a; rerender(); stopSupport = S.be.watchSupport(S.user, a, list => { S.support = list; rerender(); }); }).catch(e => { S._supErr = String(e && e.message || e); });
 }
 function supStatus(r, admin) {
   if (admin ? adminUnread(r) : userUnread(r)) return `<span class="pill no">${admin ? "ждёт ответа" : "новый ответ"}</span>`;
