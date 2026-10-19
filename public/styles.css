@@ -426,3 +426,15 @@ input[type=time]::-webkit-date-and-time-value,input[type=date]::-webkit-date-and
 .srow.sup:last-child{border-bottom:0}
 .srow.sup>.row-edit{display:block;padding:0;margin:0;border-radius:0}
 .srow.sup .set-row{border-bottom:0}
+
+/* аватары с фото */
+.avatar.has-img{padding:0;overflow:hidden;background:var(--surface-2)}
+.avatar.has-img img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+button.avatar.edit{cursor:pointer;position:relative}
+button.avatar.edit::after{content:"";position:absolute;right:-2px;bottom:-2px;width:16px;height:16px;border-radius:50%;background:var(--gold) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232A1B00' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E") center/11px no-repeat;border:2px solid var(--bg)}
+.avatar.xl{width:112px;height:112px;font-size:42px;font-family:var(--display);border-width:0}
+.av-preview{display:flex;justify-content:center;padding:6px 0}
+label.btn{cursor:pointer}
+.req .instant{font-size:13px;color:var(--muted);font-weight:600}
+.req .instant input{width:20px;height:20px}
+.gold-t{color:var(--gold-ink)}

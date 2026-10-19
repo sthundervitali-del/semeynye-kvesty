@@ -122,6 +122,16 @@ export async function firebaseBackend() {
       try { localStorage.setItem("fq-push", "1"); } catch (_) {}
       return token;
     },
+    async disablePush(user) {
+      try {
+        if (await M.isSupported()) {
+          const messaging = M.getMessaging(app);
+          const reg = await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js");
+          const token = reg ? await M.getToken(messaging, { serviceWorkerRegistration: reg }).catch(() => null) : null;
+          if (token) { await setDoc(fam("members", user.uid), { tokens: arrayRemove(token) }, { merge: true }); await M.deleteToken(messaging).catch(() => {}); }
+        }
+      } finally { try { localStorage.setItem("fq-push", "0"); } catch (_) {} }
+    },
     async resumePush() {
       try {
         if (localStorage.getItem("fq-push") !== "1" || !(await M.isSupported()) || Notification.permission !== "granted") return;
@@ -180,6 +190,6 @@ export function demoBackend(seedFn) {
     supportSeen: async (id, admin) => { const r = (store.support || []).find(x => x.id === id); if (r) { r[admin ? "adminSeenAt" : "userSeenAt"] = Date.now(); store.supportCb?.(); } },
     createInvite: async () => code8(),
     deleteFamily: async () => { throw new Error("В демо-режиме семью удалить нельзя."); },
-    enablePush: async () => { throw new Error("В демо-режиме уведомления не подключаются."); }, resumePush: async () => {},
+    enablePush: async () => { throw new Error("В демо-режиме уведомления не подключаются."); }, disablePush: async () => { try { localStorage.setItem("fq-push", "0"); } catch (_) {} }, resumePush: async () => {},
   };
 }

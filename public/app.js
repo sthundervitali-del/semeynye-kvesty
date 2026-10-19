@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.9.0", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.10.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -31,9 +31,14 @@ const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localSt
 const S = {
   be: null, user: null, families: [], fid: null, cfg: null, members: [], kidlogs: [], plogs: [],
   data: { entries: [], gifts: [] }, me: null, loaded: false, tab: null, preview: null,
-  calMonth: F.monthKey(), calKid: null, support: [], isAdmin: false, sel: null, selKind: null, sending: new Set(), drag: false, selDay: null, photos: {}, error: null, prevStatus: null, setPage: null,
+  calMonth: F.monthKey(), calKid: null, instant: new Set(), support: [], isAdmin: false, sel: null, selKind: null, sending: new Set(), drag: false, selDay: null, photos: {}, error: null, prevStatus: null, setPage: null,
 };
 const isParent = () => S.me?.role === "parent";
+/** Аватар: фото участника, если загружено, иначе первая буква. */
+const kidMember = k => k && S.members.find(m => m.role === "child" && m.kidId === k.id);
+function avatar(name, img, cls = "", style = "", attrs = "", tag = "span") {
+  return `<${tag} class="avatar ${cls} ${img ? "has-img" : ""}" style="${img ? "" : style}" ${attrs}>${img ? `<img src="${img}" alt="">` : esc(((name || "?")[0] || "?").toUpperCase())}</${tag}>`;
+}
 const kidsList = () => S.cfg?.kids || [];
 const kidById = id => kidsList().find(k => k.id === id);
 const viewingKid = () => isParent() ? S.preview : S.me?.kidId;
@@ -245,7 +250,7 @@ function topBar() {
   return `${S.be.demo ? `<div class="banner"><span>Демо-режим: данные не сохраняются</span><span class="btnrow">${["parent", "k1", "k2"].map(r => `<button class="btn sm ${demoRole() === r ? "dark" : ""}" data-act="demoRole" data-id="${r}">${r === "parent" ? "Родитель" : esc(kidById(r)?.name || r)}</button>`).join("")}</span></div>` : ""}
   ${isParent() && S.preview ? `<div class="banner"><span>Вы смотрите глазами ребёнка: ${esc(kid?.name || "")}</span><button class="btn sm dark" data-act="endPreview">Вернуться</button></div>` : ""}
   <header class="top"><div class="brand">${appIcon(36)}<div><h1>Family Quests</h1><small>${esc(S.cfg?.name || "")}</small></div></div>
-  <button class="avatar" style="${kid ? `background:${kidColor(kid)}` : ""}" data-act="${viewingKid() && !isParent() ? "kidMenu" : "tab"}" data-id="settings" aria-label="${esc(who)}">${esc((who || "?")[0].toUpperCase())}</button></header>`;
+  ${avatar(who, kid ? (isParent() ? kidMember(kid)?.avatar : S.me?.avatar) : S.me?.avatar, "", kid ? `background:${kidColor(kid)}` : "", `data-act="${viewingKid() && !isParent() ? "kidMenu" : "tab"}" data-id="settings" aria-label="${esc(who)}"`, "button")}</header>`;
 }
 function demoRole() { return S.me?.role === "parent" ? "parent" : S.me?.kidId; }
 
@@ -354,7 +359,7 @@ function histRow(e) {
   const sign = (minus ? "−" : "+") + e.value;
   const label = e.type === "game" ? `Игровое время +${e.minutes} мин` : e.type === "wish" ? `${ic("gift", "xs gold")} ${esc(e.title)}` : esc(e.title);
   const pill = e.status === "pending" ? `<span class="pill wait">${e.type === "wish" ? "ждёт" : "проверяется"}</span>` : e.status === "redo" ? `<span class="pill wait">доработка</span>` : e.status === "ok" ? `<span class="pill ok">${e.type === "task" ? "принято" : e.type === "wish" ? "одобрено" : "куплено"}</span>` : `<span class="pill no">${e.type === "wish" ? "отклонено" : "не засчитано"}</span>`;
-  const note = e.dec?.note && e.status !== "pending" ? `<br><small>${e.type === "wish" ? "Родители" : "Проверка"}: ${esc(e.dec.note)}</small>` : "";
+  const note = (e.dec?.note && e.status !== "pending" ? `<br><small>${e.type === "wish" ? "Родители" : "Проверка"}: ${esc(e.dec.note)}</small>` : "") + (e.type === "task" && e.status === "ok" && e.dec?.instant ? `<br><small class="gold-t">${ic("coins", "xs")} сразу в банк</small>` : "");
   return `<div class="it"><span>${label}<br><small>${fmtDate(e.at)}</small>${note}${canWithdraw(e) ? `<br><button class="btn sm ghost wd" data-act="withdraw" data-id="${e.id}">Отменить</button>` : ""}</span>${pill}<span class="delta num ${e.status === "no" || e.status === "redo" || e.status === "pending" ? "" : minus ? "minus" : "plus"}">${sign}</span></div>`;
 }
 function kidHistory(k) {
@@ -470,6 +475,7 @@ function parentReview() {
       : `<button class="btn ok sm" data-act="approve" data-id="${e.id}">Принять</button><button class="btn sm ghost" data-act="redo" data-id="${e.id}">На доработку</button><button class="btn no sm" data-act="reject" data-id="${e.id}">Не засчитать</button>`;
     return `<div class="req"><div><b>${e.type === "wish" ? `${ic("gift", "xs gold")} Хочет обменять: ` : ""}${esc(e.title)}</b><br><small class="hint">${esc(k?.name || "")} · ${humanDay(e.day)}, ${fmtTime(e.at)} · <span class="num">${e.type === "wish" ? "−" : "+"}${e.value}</span>${F.mult(S.cfg, e.day, e.ref) > 1 && e.type === "task" ? " (×2)" : ""}${e.late ? " · с опозданием" : ""}${e.manual ? " · засчитано родителем" : ""}</small></div>
       ${e.checks?.length ? `<ul class="checks-ro">${e.checks.map(c => `<li>${ic("check", "xs")} ${esc(c)}</li>`).join("")}</ul>` : ""}${photos}${e.resent ? `<small class="hint">Прислано повторно после доработки</small>` : ""}${ai}
+      ${e.type === "task" ? `<label class="inline instant"><input type="checkbox" data-instant="${e.id}" ${S.instant.has(e.id) ? "checked" : ""}> Сразу в банк — баллы можно потратить сейчас, не дожидаясь воскресенья</label>` : ""}
       <div class="act">${btns}</div></div>`;
   }).join("");
   out += `<p class="hint">Дети видят решения как итог автоматической проверки. Комментарий «на доработку» они увидят с пометкой «Проверка».</p></section>`;
@@ -706,7 +712,8 @@ function photoLabel(d) { return { 7: "1 неделя", 14: "2 недели", 30:
 function langOptions() {
   return `<div class="lang-opts">${[["ru", "RU", "Русский"], ["en", "EN", "English"]].map(([c, f, n]) => `<button class="lang-opt" data-act="setLang" data-id="${c}" aria-pressed="${I18N.lang() === c}"><span class="flag">${f}</span><span data-noi18n>${n}</span>${I18N.lang() === c ? ic("check") : ""}</button>`).join("")}</div>`;
 }
-function pushState() { try { if (!("Notification" in window)) return "Не поддерживаются этим браузером"; return Notification.permission === "granted" ? "Включены на этом устройстве" : Notification.permission === "denied" ? "Запрещены в настройках браузера" : "Выключены"; } catch (_) { return "Выключены"; } }
+const pushOn = () => { try { return "Notification" in window && Notification.permission === "granted" && lsGet("fq-push") === "1"; } catch (_) { return false; } };
+function pushState() { try { if (!("Notification" in window)) return "Не поддерживаются этим браузером"; if (Notification.permission === "denied") return "Запрещены в настройках браузера"; return pushOn() ? "Включены на этом устройстве" : "Выключены"; } catch (_) { return "Выключены"; } }
 function parentSettings() {
   if (S.setPage) return settingsPage(S.setPage);
   const st = S.cfg.settings || {};
@@ -714,7 +721,7 @@ function parentSettings() {
   const kidNames = kidsList().map(k => k.name).join(", ") || "Не добавлены";
   const n = S.members.length;
   const me = S.me?.name || S.user.displayName || "Родитель";
-  return `<section class="profile"><span class="avatar lg">${esc((me || "?")[0].toUpperCase())}</span><span class="t"><b>${esc(me)}</b><small>${esc(S.user.email || "")}</small><small>Семья «${esc(S.cfg.name || "")}» · родитель</small></span></section>
+  return `<section class="profile">${avatar(me, S.me?.avatar, "lg edit", "", `data-act="avatarEdit" aria-label="Фото профиля"`, "button")}<span class="t"><b>${esc(me)}</b><small>${esc(S.user.email || "")}</small><small>Семья «${esc(S.cfg.name || "")}» · родитель</small></span></section>
     <div class="set-group"><h3>Семья</h3><div class="set-list">
       ${row("members", "users", "blue", "Участники и приглашения", `${n} ${plural(n, "участник", "участника", "участников")} · пригласить по коду`)}
       ${row("kids", "smile", "violet", "Дети", esc(kidNames))}
@@ -748,13 +755,13 @@ function settingsPage(p) {
   const head = title => `<div class="sub-head"><button class="btn ghost icon" data-act="setPage" data-id="" aria-label="Назад к настройкам">${ic("chev-l")}</button><h2>${title}</h2></div>`;
   if (p === "members") {
     const members = S.members.slice().sort((a, b) => (a.role === "parent" ? 0 : 1) - (b.role === "parent" ? 0 : 1));
-    return head("Участники и приглашения") + `<section class="card"><h2>${ic("users", "h")} Участники</h2><div>${members.map(m => `<div class="row-edit w"><span class="avatar sm" style="${m.role === "child" ? `background:${kidColor(kidById(m.kidId))}` : ""}">${esc(((m.name || m.email || "?")[0] || "?").toUpperCase())}</span><div class="t"><b>${esc(m.name || m.email || "Без имени")}${m.uid === S.user.uid ? " (вы)" : ""}</b><small>${m.role === "parent" ? "родитель" : "ребёнок: " + esc(kidById(m.kidId)?.name || "?")} · ${esc(m.email || "")}</small><small>${(m.tokens || []).length ? `${ic("bell", "xs")} уведомления включены` : "без уведомлений"}</small></div>
+    return head("Участники и приглашения") + `<section class="card"><h2>${ic("users", "h")} Участники</h2><div>${members.map(m => `<div class="row-edit w">${avatar(m.name || m.email, m.avatar, "sm", m.role === "child" ? `background:${kidColor(kidById(m.kidId))}` : "")}<div class="t"><b>${esc(m.name || m.email || "Без имени")}${m.uid === S.user.uid ? " (вы)" : ""}</b><small>${m.role === "parent" ? "родитель" : "ребёнок: " + esc(kidById(m.kidId)?.name || "?")} · ${esc(m.email || "")}</small><small>${(m.tokens || []).length ? `${ic("bell", "xs")} уведомления включены` : "без уведомлений"}</small></div>
       ${m.uid !== S.user.uid ? `<button class="btn sm ghost icon danger" data-act="removeMember" data-id="${m.uid}" aria-label="Удалить ${esc(m.name || "")}">${ic("trash")}</button>` : "<span></span>"}</div>`).join("")}</div></section>
       <section class="card"><h2>${ic("plus", "h")} Пригласить</h2><div class="btnrow"><button class="btn go" data-act="inviteWho">${ic("plus")} Пригласить в семью</button></div>
       <p class="hint">Код действует 7 дней. Ребёнку нужен свой Google-аккаунт (для детей до 13 лет — через Google Family Link).</p></section>`;
   }
   if (p === "kids") return head("Дети") + `<section class="card"><form class="grid" data-form="kids">${kidsList().map(k => `
-      <div class="full kid-head"><span class="avatar sm" style="background:${kidColor(k)}">${esc((k.name || "?")[0].toUpperCase())}</span><b>${esc(k.name)}</b><button type="button" class="btn sm ghost" data-act="preview" data-id="${k.id}">Глазами ребёнка</button><button type="button" class="btn sm ghost icon danger" data-act="delKid" data-id="${k.id}" aria-label="Удалить ребёнка: ${esc(k.name)}">${ic("trash")}</button></div>
+      <div class="full kid-head">${avatar(k.name, kidMember(k)?.avatar, "sm", `background:${kidColor(k)}`)}<b>${esc(k.name)}</b><button type="button" class="btn sm ghost" data-act="preview" data-id="${k.id}">Глазами ребёнка</button><button type="button" class="btn sm ghost icon danger" data-act="delKid" data-id="${k.id}" aria-label="Удалить ребёнка: ${esc(k.name)}">${ic("trash")}</button></div>
       <label>Имя<input id="kn-${k.id}" name="n-${k.id}" value="${esc(k.name)}" required></label>
       <label>Возраст<input id="ka-${k.id}" name="a-${k.id}" type="number" inputmode="numeric" min="3" max="18" value="${k.age || ""}"></label>
       <label>Цвет<select id="kc-${k.id}" name="c-${k.id}">${Object.keys(COLORS).map(c => `<option value="${c}" ${k.color === c ? "selected" : ""}>${{ violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой" }[c]}</option>`).join("")}</select></label>`).join("")}
@@ -776,7 +783,7 @@ function settingsPage(p) {
   if (p === "notify") return head("Уведомления") + `<section class="card"><div class="state">${ic("bell", "h")} <b>${pushState()}</b></div>
       <p class="hint">Родителям приходят заявки на проверку, детям — напоминания об обязательных делах, подарки и одобренные желания. Уведомления включаются на каждом устройстве отдельно.</p>
       <p class="hint">На iPhone сначала добавьте приложение на экран «Домой»: «Поделиться» → «На экран „Домой“».</p>
-      <div class="btnrow"><button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button><button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
+      <div class="btnrow">${pushOn() ? `<button class="btn ghost" data-act="push">${ic("bell")} Выключить уведомления</button>` : `<button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button>`}<button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
   if (p === "lang") return head("Язык") + `<section class="card">${langOptions()}<p class="hint">Язык меняется только на этом устройстве. Уведомления на телефон тоже придут на выбранном языке.</p></section>`;
   const sub = (title, back) => `<div class="sub-head"><button class="btn ghost icon" data-act="setPage" data-id="${back}" aria-label="Назад">${ic("chev-l")}</button><h2>${title}</h2></div>`;
   if (p === "support") {
@@ -889,15 +896,16 @@ function redoForm(e) {
   m => { const ta = m.querySelector("#redo-note"); ta.focus();
     m.querySelector("#redo-ok").onclick = () => { decide(e, "redo", ta.value.trim()); closeModal(); }; });
 }
-function decide(e, status, note) {
-  const dec = { status, note: note ?? (status === "ok" && e.dec?.ai?.verdict === "ok" && e.dec.ai.forAt === e.at ? e.dec.ai.comment : ""), decidedAt: Date.now(), ai: e.dec?.ai || null };
-  S.be.putDecision(e.doc, e.id, dec).then(() => toast(status === "ok" ? (e.type === "wish" ? "Награда выдана" : `Принято: +${e.value}`) : status === "redo" ? "Отправлено на доработку" : e.type === "wish" ? "Отказано, баллы вернулись" : "Не засчитано")).catch(fail);
+function decide(e, status, note, instant) {
+  const dec = { status, note: note ?? (status === "ok" && e.dec?.ai?.verdict === "ok" && e.dec.ai.forAt === e.at ? e.dec.ai.comment : ""), decidedAt: Date.now(), ai: e.dec?.ai || null, instant: !!(instant && status === "ok") };
+  S.instant.delete(e.id);
+  S.be.putDecision(e.doc, e.id, dec).then(() => toast(status === "ok" ? (e.type === "wish" ? "Награда выдана" : dec.instant ? `Принято: +${e.value}, сразу в банк` : `Принято: +${e.value}`) : status === "redo" ? "Отправлено на доработку" : e.type === "wish" ? "Отказано, баллы вернулись" : "Не засчитано")).catch(fail);
 }
 function inviteWho(start) {
   const kids = kidsList();
   const page = who => who === "child"
     ? `<div class="sub-head"><button class="btn sm ghost icon" id="iw-back" aria-label="Назад">${ic("chev-l")}</button><h2>Какого ребёнка?</h2></div>
-      ${kids.length ? `<div class="set-list">${kids.map(k => `<button class="set-row" data-act="invite" data-id="${k.id}"><span class="avatar sm" style="background:${kidColor(k)}">${esc((k.name || "?")[0].toUpperCase())}</span><span class="t"><b>${esc(k.name)}</b><small>${S.members.some(m => m.kidId === k.id) ? "уже вошёл — можно пригласить на другое устройство" : "ещё не вошёл"}</small></span>${ic("chev-r", "chev")}</button>`).join("")}</div>`
+      ${kids.length ? `<div class="set-list">${kids.map(k => `<button class="set-row" data-act="invite" data-id="${k.id}">${avatar(k.name, kidMember(k)?.avatar, "sm", `background:${kidColor(k)}`)}<span class="t"><b>${esc(k.name)}</b><small>${S.members.some(m => m.kidId === k.id) ? "уже вошёл — можно пригласить на другое устройство" : "ещё не вошёл"}</small></span>${ic("chev-r", "chev")}</button>`).join("")}</div>`
         : `<div class="empty">Сначала добавьте ребёнка.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}`
     : `<h2>Кого приглашаем?</h2><div class="set-list">
       <button class="set-row" data-act="invite" data-id="parent"><span class="tile c-blue">${ic("users")}</span><span class="t"><b>Родителя</b><small>Полный доступ: дела, проверка, награды, настройки</small></span>${ic("chev-r", "chev")}</button>
@@ -925,6 +933,27 @@ function showInvite(role, kidId) {
 }
 
 /* ---------- ребёнок: отправка дела ---------- */
+/** Квадратное фото профиля 256×256. */
+async function squareAvatar(file) {
+  let img;
+  try { img = await createImageBitmap(file); }
+  catch (_) { img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
+  const side = Math.min(img.width, img.height), c = document.createElement("canvas"); c.width = c.height = 256;
+  c.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
+  return c.toDataURL("image/jpeg", .82);
+}
+function avatarEditor() {
+  const name = S.me?.name || S.user.displayName || "", cur = S.me?.avatar;
+  modal(`<h2>Фото профиля</h2><div class="av-preview">${avatar(name, cur, "xl", viewingKid() && !isParent() ? `background:${kidColor(kidById(viewingKid()))}` : "")}</div>
+    <p class="hint">Фото видят участники вашей семьи вместо буквы в кружке.</p>
+    <div class="btns"><label class="btn go">${ic("camera")} ${cur ? "Заменить фото" : "Загрузить фото"}<input type="file" id="av-in" accept="image/*" hidden></label>
+    ${cur ? `<button class="btn no" id="av-del">${ic("trash")} Удалить фото</button>` : ""}<button class="btn ghost" data-act="closeModal">Закрыть</button></div>`,
+  m => {
+    m.querySelector("#av-in").onchange = async ev => { const f = ev.target.files[0]; if (!f || !f.type.startsWith("image/")) return;
+      try { const data = await squareAvatar(f); await S.be.updateMember(S.user.uid, { avatar: data }); closeModal(); toast("Фото обновлено"); } catch (e) { fail(e); } };
+    const del = m.querySelector("#av-del"); if (del) del.onclick = () => S.be.updateMember(S.user.uid, { avatar: null }).then(() => { closeModal(); toast("Фото удалено"); }).catch(fail);
+  });
+}
 async function shrink(file, max, q) {
   let img;
   try { img = await createImageBitmap(file); }
@@ -981,6 +1010,7 @@ const stripEntry = e => { const { status, dec, value, doc, ...rest } = e; return
 setInterval(() => { if (viewingKid() && S.tab === "today" && !document.querySelector(".scrim")) rerender(); }, 60000);
 
 /* ====================== СОБЫТИЯ ====================== */
+document.addEventListener("change", e => { const c = e.target.closest?.("[data-instant]"); if (!c) return; c.checked ? S.instant.add(c.dataset.instant) : S.instant.delete(c.dataset.instant); c.blur(); });
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act, id = el.dataset.id;
@@ -1040,7 +1070,8 @@ document.addEventListener("click", e => {
   if (act === "demoRole") { const uidMap = { parent: "demo-parent", k1: "demo-k1", k2: "demo-k2" }; S.user = { ...S.user, uid: uidMap[id] }; S.me = S.members.find(m => m.uid === S.user.uid); S.preview = null; S.tab = null; S.prevStatus = null; recompute(); render(); return; }
   if (act === "preview") { S.preview = id; S.tab = "today"; window.scrollTo(0, 0); render(); return; }
   if (act === "endPreview") { S.preview = null; S.tab = "settings"; S.setPage = "kids"; render(); return; }
-  if (act === "kidMenu") { modal(`<section class="profile"><span class="avatar lg" style="background:${kidColor(kidById(viewingKid()))}">${esc((S.user.displayName || "?")[0].toUpperCase())}</span><span class="t"><b>${esc(S.user.displayName || "")}</b><small>${esc(S.user.email || "")}</small></span></section>
+  if (act === "avatarEdit") { avatarEditor(); return; }
+  if (act === "kidMenu") { modal(`<section class="profile">${avatar(S.user.displayName, S.me?.avatar, "lg edit", `background:${kidColor(kidById(viewingKid()))}`, `data-act="avatarEdit" aria-label="Фото профиля"`, "button")}<span class="t"><b>${esc(S.user.displayName || "")}</b><small>${esc(S.user.email || "")}</small></span></section>
     <div class="set-list"><button class="set-row" data-act="push"><span class="tile c-green">${ic("bell")}</span><span class="t"><b>Уведомления</b><small>${pushState()}</small></span></button><button class="set-row" data-act="setLang" data-id="${I18N.lang() === "en" ? "ru" : "en"}"><span class="tile c-blue">${ic("globe")}</span><span class="t"><b>Язык</b><small data-noi18n>${I18N.lang() === "en" ? "English → Русский" : "Русский → English"}</small></span></button><button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти</b><small>${esc(S.user.email || "")}</small></span></button></div>
     <p class="version">${appIcon(20)} Family Quests · версия ${APP_VERSION}</p>`); return; }
   if (act === "withdraw") { const en = S.data.entries.find(x => x.id === id); if (!canWithdraw(en)) return;
@@ -1056,7 +1087,7 @@ document.addEventListener("click", e => {
       S.be.putEntry(kid, F.monthKey(), { id: uid(), kid, type: "wish", ref: w.id, title: w.title, pts: w.cost, day: today(), at: Date.now() }).then(() => toast("Заявка отправлена родителям")).catch(fail);
     }); return;
   }
-  if (act === "approve" || act === "reject") { const en = S.data.entries.find(x => x.id === id); if (!en) return; if (act === "approve" && en.type === "wish") return wishApprove(en); decide(en, act === "approve" ? "ok" : "no"); return; }
+  if (act === "approve" || act === "reject") { const en = S.data.entries.find(x => x.id === id); if (!en) return; if (act === "approve" && en.type === "wish") return wishApprove(en); decide(en, act === "approve" ? "ok" : "no", undefined, act === "approve" && S.instant.has(id)); return; }
   if (act === "redo") { const en = S.data.entries.find(x => x.id === id); if (en) redoForm(en); return; }
   if (act === "undo") { const en = S.data.entries.find(x => x.id === id); if (en) S.be.putDecision(en.doc, en.id, { status: "", note: "", decidedAt: Date.now(), ai: en.dec?.ai || null }).then(() => toast("Решение отменено — заявка снова на проверке")).catch(fail); return; }
   if (act === "zoom") { const l = document.createElement("div"); l.className = "light"; l.innerHTML = `<img src="${S.photos[id]}" alt="Фото-отчёт">`; l.onclick = () => l.remove(); document.body.appendChild(l); return; }
@@ -1078,7 +1109,9 @@ document.addEventListener("click", e => {
   if (act === "inviteWho") return inviteWho(id);
   if (act === "invite") return showInvite(id === "parent" ? "parent" : "child", id);
   if (act === "removeMember") { const mm = S.members.find(x => x.uid === id); ask(`Удалить ${mm?.name || mm?.email || "участника"} из семьи?`, "Удалить", () => S.be.removeMember(id).then(() => toast("Участник удалён")).catch(fail), true); return; }
-  if (act === "push") { S.be.enablePush(S.user).then(() => { toast("Уведомления включены"); beep("good"); render(); }, err => toast(err.message || "Не удалось включить уведомления")); return; }
+  if (act === "push") {
+    if (pushOn()) { ask("Выключить уведомления на этом устройстве?", "Выключить", () => S.be.disablePush(S.user).then(() => { toast("Уведомления выключены"); if (document.querySelector(".scrim")) closeModal(); render(); }).catch(fail)); return; }
+    S.be.enablePush(S.user).then(() => { toast("Уведомления включены"); beep("good"); if (document.querySelector(".scrim")) closeModal(); render(); }, err => toast(err.message || "Не удалось включить уведомления")); return; }
   if (act === "beep") return beep("alert");
   if (act === "addKid") { const n = kidsList().length + 1; const k = { id: "k" + Date.now().toString(36), since: today(), name: "Ребёнок " + n, age: 10, color: ["violet", "teal", "rose", "gold"][n % 4] }; S.be.setFamily({ kids: [...kidsList(), k] }).then(() => toast("Ребёнок добавлен — укажите имя")).catch(fail); return; }
   if (act === "switchFamily" || act === "leaveFamily") {

@@ -117,8 +117,9 @@ var FQ = (function () {
   }
 
   function creditTime(cfg) { return (cfg && cfg.settings && cfg.settings.creditTime) || "21:00"; }
-  function creditAt(e, cfg) { return Math.max(atTime(e.day, creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
-  function activeAt(e, cfg) { return Math.max(atTime(weekEnd(e.day), creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
+  // dec.instant — родитель отметил «сразу в банк»: баллы доступны с момента решения.
+  function creditAt(e, cfg) { if (e.dec && e.dec.instant) return e.dec.decidedAt || 0; return Math.max(atTime(e.day, creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
+  function activeAt(e, cfg) { if (e.dec && e.dec.instant) return e.dec.decidedAt || 0; return Math.max(atTime(weekEnd(e.day), creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
 
   /* Счёт ребёнка на момент now. */
   function account(kid, data, cfg, now) {

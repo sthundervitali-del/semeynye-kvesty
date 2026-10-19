@@ -73,7 +73,7 @@ service cloud.firestore {
         );
         allow update: if isParent(fid)
           || (signedIn() && request.auth.uid == uid
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tokens', 'seen', 'name', 'photo']));
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tokens', 'seen', 'name', 'photo', 'avatar', 'lang']));
         allow delete: if isParent(fid) || (signedIn() && request.auth.uid == uid);
       }
 

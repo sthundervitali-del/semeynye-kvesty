@@ -207,7 +207,9 @@
     "ждёт ответа": "awaiting reply", "новый ответ": "new reply", "есть ответ": "answered", "ждёт ответа поддержки": "waiting for support",
     "Поддержка Family Quests": "Family Quests Support", "Вы": "You", "Пользователь": "User", "Ответ пользователю": "Reply to the user", "Дописать в запрос": "Add to this request",
     "Ваш ответ увидит только автор запроса.": "Only the author of the request will see your reply.", "Уточнение или новый вопрос по этой теме.": "A clarification or a new question on this topic.",
-    "Ответ отправлен": "Reply sent", "Запрос удалён": "Request deleted", "Удалить запрос": "Delete request", "Чтобы удалить запрос, смахните его влево.": "Swipe a request left to delete it.", "Чтобы удалить запрос из списка, смахните его влево. У пользователя он останется, пока он сам его не удалит.": "Swipe a request left to remove it from the list. The user keeps it until they delete it themselves.", "Сообщение отправлено": "Message sent",
+    "Ответ отправлен": "Reply sent", "Сразу в банк — баллы можно потратить сейчас, не дожидаясь воскресенья": "Straight to the bank: points can be spent now, without waiting for Sunday", "сразу в банк": "straight to the bank",
+    "Фото профиля": "Profile photo", "Фото видят участники вашей семьи вместо буквы в кружке.": "Your family members see the photo instead of the letter in the circle.", "Заменить фото": "Replace photo", "Загрузить фото": "Upload photo", "Удалить фото": "Delete photo", "Фото обновлено": "Photo updated", "Фото удалено": "Photo deleted",
+    "Выключить уведомления": "Turn off notifications", "Выключить уведомления на этом устройстве?": "Turn off notifications on this device?", "Уведомления выключены": "Notifications off", "Запрос удалён": "Request deleted", "Удалить запрос": "Delete request", "Чтобы удалить запрос, смахните его влево.": "Swipe a request left to delete it.", "Чтобы удалить запрос из списка, смахните его влево. У пользователя он останется, пока он сам его не удалит.": "Swipe a request left to remove it from the list. The user keeps it until they delete it themselves.", "Сообщение отправлено": "Message sent",
     // уровни
     "Новичок": "Rookie", "Помощник": "Helper", "Умелец": "Handy", "Мастер дома": "House master", "Герой семьи": "Family hero", "Легенда": "Legend", "Великий магистр": "Grand master",
     // статусы
@@ -283,6 +285,7 @@
     [/^родитель · (.+)$/, function (x) { return "parent · " + x; }],
     [/^ребёнок: (.+) · (.+)$/, function (k, x) { return "child: " + t(k) + " · " + x; }],
     [/^(.+) \(вы\)$/, function (x) { return t(x) + " (you)"; }],
+    [/^Принято: \+(\d+), сразу в банк$/, function (n) { return "Accepted: +" + n + ", straight to the bank"; }],
     [/^Засчитано: \+(\d+)$/, function (n) { return "Credited: +" + n; }],
     [/^Принято: \+(\d+)$/, function (n) { return "Accepted: +" + n; }],
     [/^Подарок отправлен: \+(\d+)$/, function (n) { return "Gift sent: +" + n; }],
