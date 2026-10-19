@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.10.1", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.11.0", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -496,7 +496,7 @@ function taskMeta(t) {
   const parts = [`+${t.pts}`, CATS[t.cat]?.n];
   if (t.bound) {
     const sc = t.schedule || {};
-    parts.push(sc.mode === "workdays" ? "рабочие дни" : sc.mode === "offdays" ? "выходные" : (sc.days || []).length === 7 ? "каждый день" : (sc.days || []).map(d => DOW[d - 1]).join(" "));
+    parts.push(sc.mode === "workdays" ? "рабочие дни" : sc.mode === "offdays" ? "выходные" : ((sc.days || []).length === 7 ? (sc.skipOff ? "каждый будний день" : "каждый день") : (sc.days || []).map(d => DOW[d - 1]).join(" ") + (sc.skipOff ? ", кроме выходных" : "")));
     if (t.time) parts.push(`${ic("clock", "xs")} ${t.time}${t.deadline === "strict" ? ` строго +${t.grace ?? 30} мин` : t.deadline === "late" ? ` позже ${t.latePct ?? 50}%` : ""}${t.repeat ? ` ${ic("repeat", "xs")} ${t.repeat} мин` : ""}`);
   } else parts.push(t.freq === "week" ? `${t.times || 1} р. в неделю` : FREQ[t.freq]);
   if (t.who && t.who !== "all") parts.push(esc(kidById(t.who)?.name || ""));
@@ -816,6 +816,7 @@ function taskForm(id, cat) {
     <div class="full grid" id="tf-bound">
       <label class="full">Когда<select id="tf-mode" name="mode"><option value="workdays">В рабочие (учебные) дни</option><option value="offdays">В выходные дни</option><option value="days">В выбранные дни недели</option></select></label>
       <div class="full dows" id="tf-dows">${DOW.map((d, i) => `<button type="button" data-dow="${i + 1}" aria-pressed="${t.schedule.days.includes(i + 1)}">${d}</button>`).join("")}</div>
+      <label class="inline full" id="tf-skip-l"><input type="checkbox" id="tf-skip" name="skip" ${t.schedule.skipOff ? "checked" : ""}> Не показывать в выходные (суббота, воскресенье и дни, которые вы сделали выходными в «Календаре»)</label>
       <label>Время (напоминание)<input id="tf-time" name="time" type="time" value="${esc(t.time || "")}"></label>
       <label id="tf-rep-l">Повторять напоминание<select id="tf-rep" name="rep"><option value="0">Не повторять</option><option value="5">каждые 5 мин</option><option value="10">каждые 10 мин</option><option value="15">каждые 15 мин</option><option value="20">каждые 20 мин</option><option value="30">каждые 30 мин</option><option value="60">каждый час</option></select></label>
       <label>Если не успел ко времени<select id="tf-dl" name="dl"><option value="none">Можно сделать до конца дня</option><option value="strict">Строгий срок: потом нельзя</option><option value="late">Можно позже за часть баллов</option></select></label>
@@ -837,7 +838,7 @@ function taskForm(id, cat) {
     const f = m.querySelector("#tf"); f.mode.value = t.schedule.mode || "workdays"; f.freq.value = t.freq || "week"; f.dl.value = t.deadline || "none"; f.rep.value = String(t.repeat || 0);
     const sync = () => {
       m.querySelector("#tf-bound").hidden = !t.bound; m.querySelector("#tf-unbound").hidden = t.bound;
-      m.querySelector("#tf-dows").hidden = f.mode.value !== "days";
+      m.querySelector("#tf-dows").hidden = f.mode.value !== "days"; m.querySelector("#tf-skip-l").hidden = f.mode.value !== "days";
       f.times.parentElement.hidden = f.freq.value !== "week";
       const hasT = !!f.time.value; f.dl.parentElement.hidden = !hasT; m.querySelector("#tf-rep-l").hidden = !hasT || !t.mandatory;
       m.querySelector("#tf-grace-l").hidden = !hasT || f.dl.value === "none"; m.querySelector("#tf-pct-l").hidden = !hasT || f.dl.value !== "late";
@@ -852,7 +853,7 @@ function taskForm(id, cat) {
       const tid = id || uid("t");
       const prev = S.cfg.tasks[id];
       const task = { id: tid, o: prev?.o ?? Date.now(), del: false, tpl: prev?.tpl || "", since: !prev || (prev.active === false && f.active.checked) ? today() : (prev.since || ""), title: f.title.value.trim(), cat: f.cat.value, pts: Math.max(1, parseInt(f.pts.value) || 1), who: f.who.value,
-        mandatory: !!t.mandatory, bound: !!t.bound, schedule: { mode: f.mode.value, days: t.schedule.days.slice().sort() }, time: t.bound ? f.time.value : "", deadline: t.bound && f.time.value ? f.dl.value : "none", grace: Math.max(0, parseInt(f.grace.value) || 0), repeat: t.mandatory && f.time.value ? parseInt(f.rep.value) || 0 : 0, latePct: Math.min(100, Math.max(0, parseInt(f.pct.value) || 0)),
+        mandatory: !!t.mandatory, bound: !!t.bound, schedule: { mode: f.mode.value, days: t.schedule.days.slice().sort(), skipOff: f.mode.value === "days" && f.skip.checked }, time: t.bound ? f.time.value : "", deadline: t.bound && f.time.value ? f.dl.value : "none", grace: Math.max(0, parseInt(f.grace.value) || 0), repeat: t.mandatory && f.time.value ? parseInt(f.rep.value) || 0 : 0, latePct: Math.min(100, Math.max(0, parseInt(f.pct.value) || 0)),
         freq: t.bound ? "day" : f.freq.value, times: Math.max(1, parseInt(f.times.value) || 1),
         checklist: f.checklist.value.split("\n").map(x => x.trim()).filter(Boolean), photo: f.photo.checked, active: f.active.checked };
       S.be.setFamily({ tasks: { [tid]: task } }).then(() => toast("Дело сохранено")).catch(fail); closeModal();

@@ -72,7 +72,7 @@ var FQ = (function () {
     var info = dayInfo(s, cfg);
     if (sch.mode === "workdays") return info.type === "work";
     if (sch.mode === "offdays") return info.type === "off";
-    if (sch.mode === "days") return (sch.days || []).indexOf(isoDow(s)) >= 0;
+    if (sch.mode === "days") return (sch.days || []).indexOf(isoDow(s)) >= 0 && !(sch.skipOff && info.type === "off"); // «не показывать в выходные»
     return info.type === "work";
   }
   /* Срок дела со временем: none — без срока; strict — после срока закрыто; late — можно сдать позже за часть баллов.

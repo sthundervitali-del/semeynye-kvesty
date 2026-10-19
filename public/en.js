@@ -87,7 +87,7 @@
     "выходной": "day off", "праздник": "holiday", "изменено родителями": "changed by parents", "двойные баллы": "double points", "пропущено": "missed",
     "рабочий день": "working day", "За день": "Day", "Баллы за неделю": "Points for the week", "уже доступны для трат": "already available to spend",
     "Предыдущий месяц": "Previous month", "Следующий месяц": "Next month", "Тип дня": "Day type",
-    "Настроить день (для всех детей)": "Set up the day (for all children)", "По календарю": "By calendar", "Как обычно": "As usual", "В выходные дни": "On days off", "Календарь с выходными": "Calendar with days off", "Выходной": "Day off", "Рабочий": "Working",
+    "Настроить день (для всех детей)": "Set up the day (for all children)", "По календарю": "By calendar", "Как обычно": "As usual", "Не показывать в выходные (суббота, воскресенье и дни, которые вы сделали выходными в «Календаре»)": "Hide on days off (Saturday, Sunday and days you made days off in the Calendar)", "В выходные дни": "On days off", "Календарь с выходными": "Calendar with days off", "Выходной": "Day off", "Рабочий": "Working",
     "Двойные баллы в этот день:": "Double points on this day:", "Нет дел на этот день.": "No tasks on this day.",
     "Дел по расписанию нет.": "No scheduled tasks.", "В этот день ничего не отмечено.": "Nothing was marked on this day.",
     "обязательно": "required", "запланировано": "planned", "по желанию": "optional", "обязательное дело": "required task",
@@ -316,7 +316,7 @@
 
   // Короткие фрагменты для составных подписей. Подставляются, когда целиком строку перевести не вышло.
   var W = {
-    "сколько угодно раз": "any number of times", "сколько угодно": "any number of times", "каждый день": "every day", "рабочие дни": "working days",
+    "сколько угодно раз": "any number of times", "сколько угодно": "any number of times", "каждый будний день": "every working day", "кроме выходных": "except days off", "каждый день": "every day", "каждый будний день": "every working day", "кроме выходных": "except days off", "рабочие дни": "working days",
     "выходные": "days off", "на неделе": "this week", "уже добавлено": "already added", "строго": "strict", "позже": "later", "мин": "min",
     "фото": "photo", "раз в день": "once a day", "р. в неделю": "× a week", "засчитано родителем": "credited by parent", "с опозданием": "late",
     "повторно": "resent", "для всех детей": "for all children", "сдать до": "due by", "из": "of",
