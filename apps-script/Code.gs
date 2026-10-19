@@ -43,7 +43,7 @@ var FQ = (function () {
   /* Тип дня: work | off, с причиной. overrides — {date:{type}} от родителей. */
   function dayInfo(s, cfg) {
     var ov = cfg && cfg.days && cfg.days[s];
-    var useBY = !cfg || !cfg.settings || cfg.settings.belarus !== false;
+    var useBY = false; // государственные праздники больше не подставляются: выходные дни отмечают родители в «Календаре»
     var dow = isoDow(s);
     var base = { type: dow >= 6 ? "off" : "work", reason: dow >= 6 ? "weekend" : "", name: "" };
     if (useBY) {

@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.10.0", APP_DATE = "17.10.2026";
+const APP_VERSION = "2.10.1", APP_DATE = "17.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -70,7 +70,7 @@ const WISH_TEMPLATES = [
   ["food", "Любимая еда на ужин", 120], ["nochores", "День без домашних дел", 150], ["book", "Набор для творчества или книга на выбор", 200],
   ["cinema", "Кино с друзьями", 250], ["ingame", "Покупка в игре (по договорённости)", 300], ["trip", "Поездка или прогулка на выбор", 400], ["big", "Большое желание из списка", 600],
 ];
-const defaultSettings = () => ({ creditTime: "21:00", belarus: true, autoAI: false, tz: "Europe/Minsk", photoDays: 14 });
+const defaultSettings = () => ({ creditTime: "21:00", autoAI: false, tz: "Europe/Minsk", photoDays: 14 });
 /** Дело из шаблона (без id). Для «на каждого ребёнка» — отдельное дело с временем по возрасту. */
 function tplTask(tp, kid) {
   const { perKid, tpl, ...rest } = tp;
@@ -262,7 +262,7 @@ function loginScreen() {
     <p class="hint" style="font-size:15px">Дела по дому и учёба за баллы. Баллы копятся за неделю и обмениваются на награды.</p>
     ${join ? `<div class="banner">Вас пригласили в семью. Войдите, чтобы присоединиться.</div>` : ""}
     <button class="gbtn" data-act="signIn">${GLOGO} Войти через Google</button>
-    <div class="feat"><div>${ic("checklist")}<span>Обязательные и дополнительные дела</span></div><div>${ic("bell")}<span>Напоминания на телефон</span></div><div>${ic("calendar")}<span>Календарь с праздниками</span></div><div>${ic("gift")}<span>Награды и подарки</span></div></div>
+    <div class="feat"><div>${ic("checklist")}<span>Обязательные и дополнительные дела</span></div><div>${ic("bell")}<span>Напоминания на телефон</span></div><div>${ic("calendar")}<span>Календарь с выходными</span></div><div>${ic("gift")}<span>Награды и подарки</span></div></div>
     <p class="hint">Каждая семья видит только свои данные.</p></div></div>`;
 }
 function onboardingScreen() {
@@ -414,7 +414,7 @@ function calendarView(kParam) {
   let out = `<section class="card">${parentMode && kids.length > 1 ? `<div class="chips">${kids.map(k => `<button class="chip" data-act="calKid" data-id="${k.id}" aria-pressed="${k.id === kid}">${esc(k.name)}</button>`).join("")}</div>` : ""}
     <div class="cal-head"><button class="btn sm ghost icon" data-act="calPrev" aria-label="Предыдущий месяц">${ic("chev-l")}</button><b>${MONTHS[m - 1]} ${y}</b><button class="btn sm ghost icon" data-act="calNext" aria-label="Следующий месяц">${ic("chev-r")}</button></div>
     <div class="cal">${cells}</div>
-    <div class="legend"><span><i style="background:var(--off)"></i>выходной</span><span>${ic("sparkle", "xs")} праздник</span><span>${ic("pencil", "xs")} изменено родителями</span><span><b class="x2 sm">×2</b> двойные баллы</span><span class="bad"><b>−N</b> пропущено</span></div></section>`;
+    <div class="legend"><span><i style="background:var(--off)"></i>выходной</span><span>${ic("pencil", "xs")} изменено родителями</span><span><b class="x2 sm">×2</b> двойные баллы</span><span class="bad"><b>−N</b> пропущено</span></div></section>`;
   out += dayPanel(kid, S.selDay, parentMode);
   return out;
 }
@@ -441,7 +441,7 @@ function dayPanel(kid, s, parentMode) {
     const tasks = F.live(S.cfg.tasks).filter(t => t.active !== false && F.forKid(t, kid) && (!t.bound || F.applies(t, s, S.cfg)));
     if (s < t0) out += `<h3>Настроить день (для всех детей)</h3><p class="hint">${ic("clock", "xs")} День уже прошёл — его тип и двойные баллы менять нельзя, чтобы не изменились начисленные баллы и пропуски. Пропущенное дело можно засчитать кнопкой «Засчитать».</p>`;
     else out += `<h3>Настроить день (для всех детей)</h3>
-      <div class="seg" role="group" aria-label="Тип дня">${[["auto", "По календарю"], ["off", "Выходной"], ["work", "Рабочий"]].map(([v, n]) => `<button data-act="dayType" data-id="${v}" aria-pressed="${(ov.type || "auto") === v}">${n}</button>`).join("")}</div>
+      <div class="seg" role="group" aria-label="Тип дня">${[["auto", "Как обычно"], ["off", "Выходной"], ["work", "Рабочий"]].map(([v, n]) => `<button data-act="dayType" data-id="${v}" aria-pressed="${(ov.type || "auto") === v}">${n}</button>`).join("")}</div>
       <p class="hint">Двойные баллы в этот день:</p>
       <div class="chips">${tasks.map(t => `<button class="chip" data-act="dayX2" data-id="${t.id}" aria-pressed="${(ov.x2 || []).includes(t.id)}">×2 ${esc(t.title)}</button>`).join("") || `<span class="hint">Нет дел на этот день.</span>`}</div>`;
   }
@@ -728,7 +728,6 @@ function parentSettings() {
     </div></div>
     <div class="set-group"><h3>Правила</h3><div class="set-list">
       ${row("points", "trophy", "gold", "Баллы", `Зачисление в ${esc(F.creditTime(S.cfg))}, трата после воскресенья`)}
-      ${row("calendar", "calendar", "teal", "Календарь", st.belarus !== false ? "Праздники и переносы выходных учитываются" : "Выходные — только суббота и воскресенье")}
       ${row("check", "camera", "rose", "Проверка и фото", `${st.autoAI ? "Автоприём по ИИ" : "Решает родитель"} · фото хранятся ${photoLabel(photoDays())}`)}
     </div></div>
     <div class="set-group"><h3>Это устройство</h3><div class="set-list">
@@ -770,10 +769,6 @@ function settingsPage(p) {
       <label>Время вечернего начисления<input id="s-ct" name="ct" type="time" value="${esc(st.creditTime || "21:00")}"></label>
       <div><button class="btn go">Сохранить</button></div></form>
       <ul class="facts"><li>${ic("check", "xs")} Баллы за принятые дела зачисляются каждый вечер в это время.</li><li>${ic("check", "xs")} Тратить их можно после воскресенья в это же время.</li><li>${ic("check", "xs")} Подарки и бонусы доступны сразу.</li><li>${ic("check", "xs")} Двойные баллы на конкретный день включаются в «Календаре».</li></ul></section>`;
-  if (p === "calendar") return head("Календарь") + `<section class="card"><form class="grid" data-form="set-cal">
-      <label class="inline full"><input id="s-by" name="by" type="checkbox" ${st.belarus !== false ? "checked" : ""}> Учитывать государственные праздники и переносы выходных</label>
-      <div><button class="btn go">Сохранить</button></div></form>
-      <p class="hint">Если выключить, выходными считаются только суббота и воскресенье. Любой день можно сделать выходным или рабочим вручную: откройте его в «Календаре».</p></section>`;
   if (p === "check") return head("Проверка и фото") + `<section class="card"><form class="grid" data-form="set-check">
       <label class="inline full"><input id="s-ai" name="ai" type="checkbox" ${st.autoAI ? "checked" : ""}> Принимать задание автоматически, если ИИ уверен, что по фото всё выполнено</label>
       <label>Хранить фото-отчёты<select id="s-ph" name="ph">${[[7, "1 неделю"], [14, "2 недели"], [30, "1 месяц"], [90, "3 месяца"], [0, "Свой срок…"]].map(([d, n]) => `<option value="${d}" ${(d === photoDays() && [7, 14, 30, 90].includes(d)) || (d === 0 && ![7, 14, 30, 90].includes(photoDays())) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
@@ -819,7 +814,7 @@ function taskForm(id, cat) {
     <div class="full seg" role="group" aria-label="Обязательность"><button type="button" data-k="mandatory" data-v="1" aria-pressed="${!!t.mandatory}">Обязательное</button><button type="button" data-k="mandatory" data-v="0" aria-pressed="${!t.mandatory}">Дополнительное</button></div>
     <div class="full seg" role="group" aria-label="Привязка"><button type="button" data-k="bound" data-v="1" aria-pressed="${!!t.bound}">По дням недели</button><button type="button" data-k="bound" data-v="0" aria-pressed="${!t.bound}">Без привязки к дню</button></div>
     <div class="full grid" id="tf-bound">
-      <label class="full">Когда<select id="tf-mode" name="mode"><option value="workdays">В рабочие (учебные) дни</option><option value="offdays">В выходные и праздники</option><option value="days">В выбранные дни недели</option></select></label>
+      <label class="full">Когда<select id="tf-mode" name="mode"><option value="workdays">В рабочие (учебные) дни</option><option value="offdays">В выходные дни</option><option value="days">В выбранные дни недели</option></select></label>
       <div class="full dows" id="tf-dows">${DOW.map((d, i) => `<button type="button" data-dow="${i + 1}" aria-pressed="${t.schedule.days.includes(i + 1)}">${d}</button>`).join("")}</div>
       <label>Время (напоминание)<input id="tf-time" name="time" type="time" value="${esc(t.time || "")}"></label>
       <label id="tf-rep-l">Повторять напоминание<select id="tf-rep" name="rep"><option value="0">Не повторять</option><option value="5">каждые 5 мин</option><option value="10">каждые 10 мин</option><option value="15">каждые 15 мин</option><option value="20">каждые 20 мин</option><option value="30">каждые 30 мин</option><option value="60">каждый час</option></select></label>
@@ -1104,7 +1099,7 @@ document.addEventListener("click", e => {
   if (act === "calKid") { S.calKid = id; render(); return; }
   if (act === "calPrev" || act === "calNext") { const [y, m] = S.calMonth.split("-").map(Number); S.calMonth = F.monthKey(new Date(y, m - 1 + (act === "calNext" ? 1 : -1), 1)); render(); return; }
   if ((act === "dayType" || act === "dayX2") && S.selDay < today()) return toast("Прошедший день менять нельзя");
-  if (act === "dayType") { S.be.setFamily({ days: { [S.selDay]: { type: id } } }).then(() => toast(id === "auto" ? "День как в календаре" : id === "off" ? "День сделан выходным" : "День сделан рабочим")).catch(fail); return; }
+  if (act === "dayType") { S.be.setFamily({ days: { [S.selDay]: { type: id } } }).then(() => toast(id === "auto" ? "День как обычно" : id === "off" ? "День сделан выходным" : "День сделан рабочим")).catch(fail); return; }
   if (act === "dayX2") { const cur = (S.cfg.days?.[S.selDay]?.x2 || []).slice(); const i = cur.indexOf(id); i >= 0 ? cur.splice(i, 1) : cur.push(id); S.be.setFamily({ days: { [S.selDay]: { x2: cur } } }).then(() => toast(i >= 0 ? "Двойные баллы сняты" : "В этот день баллы ×2")).catch(fail); return; }
   if (act === "inviteWho") return inviteWho(id);
   if (act === "invite") return showInvite(id === "parent" ? "parent" : "child", id);
@@ -1154,7 +1149,6 @@ document.addEventListener("submit", e => {
     return;
   }
   if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00" } }).then(saved).catch(fail);
-  if (kind === "set-cal") S.be.setFamily({ settings: { belarus: f.by.checked } }).then(saved).catch(fail);
   if (kind === "set-check") { const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14)); S.be.setFamily({ settings: { autoAI: f.ai.checked, photoDays: ph } }).then(saved).catch(fail); }
   if (kind === "delFamily") {
     const err = document.getElementById("del-err");
