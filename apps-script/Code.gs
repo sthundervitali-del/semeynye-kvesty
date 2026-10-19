@@ -566,7 +566,15 @@ function waitOp(name, host, ver) {
 function repoFiles(prefix) {
   var repo = prop("GITHUB_REPO"), branch = prop("GITHUB_BRANCH", "main");
   if (!repo) throw new Error("Укажите свойство GITHUB_REPO, например user/semeynye-kvesty");
-  var raw = "https://raw.githubusercontent.com/" + repo + "/" + branch + "/";
+  // Берём файлы по номеру последнего коммита: ссылки на ветку GitHub кэширует до 5 минут, и выкладка могла получить старую версию.
+  var ref = branch;
+  try {
+    var refs = UrlFetchApp.fetch("https://github.com/" + repo + ".git/info/refs?service=git-upload-pack", { muteHttpExceptions: true }).getContentText();
+    var m = new RegExp("([0-9a-f]{40}) refs/heads/" + branch + "\\b").exec(refs);
+    if (m) ref = m[1];
+  } catch (e) { console.warn("Не удалось узнать последний коммит: " + e); }
+  console.log("Версия с GitHub: " + (ref === branch ? branch : ref.slice(0, 7)));
+  var raw = "https://raw.githubusercontent.com/" + repo + "/" + ref + "/";
   var list = JSON.parse(UrlFetchApp.fetch(raw + "deploy-files.json?t=" + Date.now()).getContentText());
   return list.filter(function (p) { return p.indexOf(prefix) === 0; }).map(function (p) {
     return { path: p, bytes: UrlFetchApp.fetch(raw + p + "?t=" + Date.now()).getContent() };
