@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.11.1", APP_DATE = "19.10.2026";
+const APP_VERSION = "2.11.2", APP_DATE = "20.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -612,9 +612,17 @@ document.addEventListener("pointerdown", e => {
   row.classList.add("dragging"); list.classList.add("sorting");
   const place = () => {
     const y = lastY - grab, mid = y + row.offsetHeight / 2;
-    const prev = row.previousElementSibling, next = row.nextElementSibling;
-    if (prev) { const r = prev.getBoundingClientRect(); if (mid < r.top + r.height / 2) list.insertBefore(row, prev); }
-    if (next) { const r = next.getBoundingClientRect(); if (mid > r.top + r.height / 2) list.insertBefore(next, row); }
+    // Двигаем соседей, а не саму строку: перенос перетаскиваемого узла в DOM сбрасывает захват указателя.
+    for (let k = 0; k < 50; k++) {
+      const prev = row.previousElementSibling;
+      if (!prev) break; const r = prev.getBoundingClientRect(); if (mid >= r.top + r.height / 2) break;
+      list.insertBefore(prev, row.nextElementSibling);
+    }
+    for (let k = 0; k < 50; k++) {
+      const next = row.nextElementSibling;
+      if (!next) break; const r = next.getBoundingClientRect(); if (mid <= r.top + r.height / 2) break;
+      list.insertBefore(next, row);
+    }
     const lt = row.getBoundingClientRect().top - curT;
     const lr = list.getBoundingClientRect();
     curT = Math.max(lr.top - lt - 6, Math.min(lr.bottom - lt - row.offsetHeight + 6, y - lt));
@@ -630,7 +638,9 @@ document.addEventListener("pointerdown", e => {
   raf = requestAnimationFrame(scroller);
   const move = ev => { lastY = ev.clientY; place(); };
   const up = () => {
+    if (!S.drag) return;
     h.removeEventListener("pointermove", move); h.removeEventListener("pointerup", up); h.removeEventListener("pointercancel", up);
+    document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
     cancelAnimationFrame(raf);
     row.style.transform = ""; row.classList.remove("dragging"); list.classList.remove("sorting");
     const ids = [...list.children].map(r => r.dataset.id);
@@ -646,6 +656,7 @@ document.addEventListener("pointerdown", e => {
     if (renderPending) rerender();
   };
   h.addEventListener("pointermove", move); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
+  document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 });
 function templatePicker({ title, hint, groups, used, onAdd }) {
   const rows = [];
