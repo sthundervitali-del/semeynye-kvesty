@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.13.0", APP_DATE = "22.10.2026";
+const APP_VERSION = "2.13.1", APP_DATE = "22.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -235,8 +235,34 @@ function render() {
   html += `</div>`;
   app.innerHTML = html;
   I18N.apply(app);
+  deskLayout();
   if (kidMode) maybeShowGift();
 }
+/* Компьютер: карточки раскладываются по колонкам одинаковой высоты, последняя карточка в колонке тянется до низа. */
+const DESK = matchMedia("(min-width: 1100px)"), WIDE = matchMedia("(min-width: 1700px)");
+function deskLayout() {
+  const wrap = document.querySelector("#app > .wrap"); if (!wrap) return;
+  const old = wrap.querySelector(":scope > .cols");
+  if (old) { for (const col of [...old.children]) old.before(...col.children); old.remove(); }
+  if (!DESK.matches) return;
+  const span = el => el.matches(".top,.banner,.sub-head,.version,.empty") || (wrap.dataset.tab === "tasks" && el.matches("section.card") && el === wrap.querySelector(":scope > section.card"));
+  const items = [...wrap.children].filter(el => !span(el));
+  if (items.filter(el => el.matches("section,.set-group,.profile")).length < 2) return;
+  const n = WIDE.matches && ["tasks", "settings"].includes(wrap.dataset.tab) ? 3 : 2;
+  const gap = 18, hs = items.map(el => el.getBoundingClientRect().height + gap), total = hs.reduce((a, b) => a + b, 0);
+  const cols = document.createElement("div"); cols.className = "cols"; cols.style.setProperty("--n", n);
+  const groups = Array.from({ length: n }, () => []);
+  // Раскладываем по порядку, как газетные колонки: следующая колонка начинается, когда текущая набрала свою долю.
+  let c = 0, acc = 0;
+  items.forEach((el, i) => { if (c < n - 1 && acc > 0 && acc + hs[i] / 2 > total * (c + 1) / n) c++; groups[c].push(el); acc += hs[i]; });
+  for (const g of groups) { if (!g.length) continue; const col = document.createElement("div"); col.className = "col"; col.append(...g); cols.append(col); }
+  cols.style.setProperty("--n", cols.children.length);
+  const first = wrap.querySelector(":scope > .version");
+  first ? first.before(cols) : wrap.append(cols);
+}
+let deskT = 0;
+const relayout = () => { clearTimeout(deskT); deskT = setTimeout(() => { if (!S.drag) deskLayout(); }, 120); };
+DESK.addEventListener?.("change", relayout); WIDE.addEventListener?.("change", relayout);
 function rerender() {
   const a = document.activeElement;
   if (S.drag || (a && a.closest && a.closest("#app") && a.matches("input,textarea,select"))) { renderPending = true; return; }

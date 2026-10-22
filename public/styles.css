@@ -459,7 +459,7 @@ label.btn{cursor:pointer}
 @media (min-width:1100px){
   :root{--side:240px}
   body{background:radial-gradient(1100px 600px at 60% -220px,#1E2457 0%,transparent 70%) no-repeat,var(--bg)}
-  .nav{top:0;bottom:0;left:0;right:auto;width:var(--side);border:0;border-right:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 22px) 14px 22px;overflow-y:auto}
+  .nav{top:0;bottom:0;left:0;right:auto;width:var(--side);height:100vh;height:100dvh;border:0;border-right:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 22px) 14px 22px;overflow-y:auto}
   .nav-in{flex-direction:column;max-width:none;gap:4px;margin:0}
   .nav-logo{display:block;padding:0 10px 22px}
   .nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:12px;padding:6px 10px;min-height:50px;border-radius:14px;font-size:15px;transition:background .15s,color .15s}
@@ -467,14 +467,14 @@ label.btn{cursor:pointer}
   .nav button[aria-current="page"]{background:var(--surface-2)}
   .nav .ico{width:40px;height:34px}
   .nav .lbl{overflow:visible}
-  .wrap{display:block;max-width:1400px;margin:0 0 0 calc(var(--side) + max(0px, (100vw - var(--side) - 1400px) / 2));padding:28px 40px 56px;column-count:2;column-gap:22px}
-  .wrap>*{break-inside:avoid;margin:0 0 18px}
-  .wrap>.top,.wrap>.banner,.wrap>.sub-head,.wrap>.version,.wrap>.empty,.wrap[data-tab="tasks"]>section.card:first-of-type{column-span:all}
-  .wrap>.top{margin-bottom:22px}
-  /* Страницы из одной карточки (настройки, поддержка) — одна колонка комфортной ширины. */
-  .wrap:not(:has(>section~section)):not(:has(>.set-group)){column-count:1}
-  .wrap:not(:has(>section~section)):not(:has(>.set-group))>section{max-width:880px}
+  .wrap{max-width:1400px;min-height:100vh;min-height:100dvh;margin:0 0 0 calc(var(--side) + max(0px, (100vw - var(--side) - 1400px) / 2));padding:28px 40px 40px;gap:18px}
+  .wrap>.top{margin-bottom:4px}
+  .cols{flex:1;display:grid;grid-template-columns:repeat(var(--n,2),minmax(0,1fr));gap:22px;align-items:stretch}
+  .col{display:flex;flex-direction:column;gap:18px;min-width:0}
+  .col>*{margin:0}
+  .col>:last-child{flex:1}
+  /* Страницы из одной карточки (настройки, поддержка) — комфортная ширина. */
+  .wrap:not(:has(>.cols))>section{max-width:880px;width:100%}
   .toast{left:calc(50% + var(--side) / 2)}
   .selbar{left:calc(50% + var(--side) / 2)}
 }
-@media (min-width:1700px){ .wrap[data-tab="tasks"],.wrap[data-tab="settings"]{column-count:3} }
