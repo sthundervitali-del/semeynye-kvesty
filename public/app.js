@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.12.0", APP_DATE = "22.10.2026";
+const APP_VERSION = "2.13.0", APP_DATE = "22.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -225,7 +225,7 @@ function render() {
     : [["review", "inbox", "Проверка"], ["cal", "calendar", "Календарь"], ["tasks", "checklist", "Дела"], ["rewards", "gift", "Награды"], ["settings", "sliders", "Настройки"]];
   if (!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
   const pend = pendingList().length;
-  let html = `<nav class="nav" aria-label="Разделы"><div class="nav-in">${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="ico">${ic(i)}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}${id === "settings" && supportBadge() ? `<span class="badge">${supportBadge()}</span>` : ""}</span><span class="lbl">${n}</span></button>`).join("")}</div></nav><div class="wrap">`;
+  let html = `<nav class="nav" aria-label="Разделы"><div class="nav-in"><div class="nav-logo" aria-hidden="true">${appIcon(40)}</div>${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="ico">${ic(i)}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}${id === "settings" && supportBadge() ? `<span class="badge">${supportBadge()}</span>` : ""}</span><span class="lbl">${n}</span></button>`).join("")}</div></nav><div class="wrap" data-tab="${S.tab}">`;
   html += topBar();
   if (kidMode) {
     const k = kidById(viewingKid());
@@ -662,9 +662,10 @@ function openViewer(srcs, start = 0) {
   document.querySelector(".viewer")?.remove();
   let idx = Math.min(start, srcs.length - 1), sc = 1, tx = 0, ty = 0;
   const v = document.createElement("div"); v.className = "viewer"; v.setAttribute("role", "dialog"); v.setAttribute("aria-modal", "true"); v.setAttribute("aria-label", tr("Фото-отчёт"));
-  const many = srcs.length > 1;
+  const many = srcs.length > 1, desk = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const fsOk = desk && !!(document.fullscreenEnabled && v.requestFullscreen);
   v.innerHTML = `<div class="vw-stage"><img class="vw-img" alt="${tr("Фото-отчёт")}" draggable="false"></div>
-    <div class="vw-top"><span class="vw-count num"></span><button class="vw-btn" data-v="close" aria-label="${tr("Закрыть")}">${ic("x")}</button></div>
+    <div class="vw-top"><span class="vw-count num"></span><span class="vw-tr">${fsOk ? `<button class="vw-btn" data-v="fs" aria-label="${tr("Во весь экран")}" title="${tr("Во весь экран")}">${ic("expand")}</button>` : ""}<button class="vw-btn" data-v="close" aria-label="${tr("Закрыть")}">${ic("x")}</button></span></div>
     ${many ? `<button class="vw-btn vw-nav prev" data-v="prev" aria-label="${tr("Предыдущее фото")}">${ic("chev-l")}</button><button class="vw-btn vw-nav next" data-v="next" aria-label="${tr("Следующее фото")}">${ic("chev-r")}</button>` : ""}
     <div class="vw-bar"><button class="vw-btn" data-v="out" aria-label="${tr("Уменьшить")}">${ic("minus")}</button><button class="vw-btn vw-pct num" data-v="reset" aria-label="${tr("Исходный размер")}">100%</button><button class="vw-btn" data-v="in" aria-label="${tr("Увеличить")}">${ic("plus")}</button></div>`;
   const stage = v.querySelector(".vw-stage"), img = v.querySelector(".vw-img"), cnt = v.querySelector(".vw-count"), pct = v.querySelector(".vw-pct");
@@ -681,20 +682,33 @@ function openViewer(srcs, start = 0) {
     const r = stage.getBoundingClientRect(), ox = cx - (r.left + r.width / 2), oy = cy - (r.top + r.height / 2);
     tx = ox - (ox - tx) * ns / sc; ty = oy - (oy - ty) * ns / sc; sc = ns; apply(anim);
   };
+  // Вписываем фото в окно целиком (маленькие снимки растягиваются), на компьютере — почти на весь экран.
+  const fit = () => {
+    const nw = img.naturalWidth, nh = img.naturalHeight; if (!nw || !nh) return;
+    const W = stage.clientWidth - (desk ? (many ? 136 : 32) : 24), H = stage.clientHeight - (desk ? 120 : 140);
+    const k = Math.max(0.05, Math.min(W / nw, H / nh));
+    img.style.width = Math.round(nw * k) + "px"; img.style.height = Math.round(nh * k) + "px"; apply(false);
+  };
+  img.addEventListener("load", fit);
+  v.addEventListener("fullscreenchange", () => { const b = v.querySelector("[data-v=fs]"); if (b) { const on = document.fullscreenElement === v; b.innerHTML = ic(on ? "collapse" : "expand"); b.setAttribute("aria-label", tr(on ? "Выйти из полноэкранного режима" : "Во весь экран")); b.title = b.getAttribute("aria-label"); } });
+  const onResize = () => fit();
+  window.addEventListener("resize", onResize);
   const center = () => { const r = stage.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
   const show = i => { idx = (i + srcs.length) % srcs.length; sc = 1; tx = ty = 0; img.src = srcs[idx]; cnt.textContent = many ? `${idx + 1} / ${srcs.length}` : ""; apply(false); };
-  const close = () => { v.remove(); document.removeEventListener("keydown", key, true); };
+  const close = () => { if (document.fullscreenElement === v) document.exitFullscreen?.().catch(() => {}); v.remove(); document.removeEventListener("keydown", key, true); window.removeEventListener("resize", onResize); };
   const key = e => {
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (!document.fullscreenElement) close(); }
     else if (e.key === "ArrowRight" && many) show(idx + 1);
     else if (e.key === "ArrowLeft" && many) show(idx - 1);
     else if (e.key === "+" || e.key === "=") zoomAt(sc * 1.5, ...center(), true);
     else if (e.key === "-") zoomAt(sc / 1.5, ...center(), true);
+    else if ((e.key === "f" || e.key === "F" || e.key === "а" || e.key === "А") && fsOk) v.querySelector("[data-v=fs]").click();
   };
   document.addEventListener("keydown", key, true);
   v.addEventListener("click", e => {
     const b = e.target.closest("[data-v]"); if (!b) return;
     const a = b.dataset.v;
+    if (a === "fs") { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else v.requestFullscreen().catch(() => {}); return; }
     if (a === "close") close(); else if (a === "prev") show(idx - 1); else if (a === "next") show(idx + 1);
     else if (a === "in") zoomAt(sc * 1.5, ...center(), true); else if (a === "out") zoomAt(sc / 1.5, ...center(), true); else if (a === "reset") zoomAt(1, ...center(), true);
   });

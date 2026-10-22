@@ -156,7 +156,7 @@
     // настройки
     "Семья": "Family", "Участники и приглашения": "Members and invites", "Дети": "Children", "Правила": "Rules", "Баллы": "Points",
     "Праздники и переносы выходных учитываются": "Holidays and moved days off are counted", "Выходные — только суббота и воскресенье": "Days off: Saturday and Sunday only",
-    "Проверка и фото": "Review and photos", "Предыдущее фото": "Previous photo", "Следующее фото": "Next photo", "Уменьшить": "Zoom out", "Увеличить": "Zoom in", "Исходный размер": "Actual size", "Решает родитель": "Parent decides", "Автоприём по ИИ": "AI auto-accept",
+    "Проверка и фото": "Review and photos", "Предыдущее фото": "Previous photo", "Во весь экран": "Full screen", "Выйти из полноэкранного режима": "Exit full screen", "Следующее фото": "Next photo", "Уменьшить": "Zoom out", "Увеличить": "Zoom in", "Исходный размер": "Actual size", "Решает родитель": "Parent decides", "Автоприём по ИИ": "AI auto-accept",
     "Это устройство": "This device", "Уведомления": "Notifications", "Язык": "Language", "Аккаунт": "Account", "Опасная зона": "Danger zone",
     "Удалить семью": "Delete family", "Все дела, баллы, история и участники": "All tasks, points, history and members",
     "Запрещены в настройках браузера": "Blocked in browser settings", "Включены на этом устройстве": "On for this device",
