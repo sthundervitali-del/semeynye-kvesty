@@ -11,8 +11,7 @@ export async function firebaseBackend() {
   const config = await cfgRes.json();
   // Вход через тот же домен, где открыто приложение: иначе Safari и установленное приложение
   // теряют состояние входа («missing initial state») из-за изоляции хранилища между сайтами.
-  // Включить, когда Google начнёт принимать адрес возврата на web.app (иначе redirect_uri_mismatch):
-  // if (/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) config.authDomain = location.hostname;
+  if (/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) config.authDomain = location.hostname;
   const [{ initializeApp }, A, F, M] = await Promise.all([
     import(SDK + "firebase-app.js"), import(SDK + "firebase-auth.js"),
     import(SDK + "firebase-firestore.js"), import(SDK + "firebase-messaging.js"),
