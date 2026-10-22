@@ -1,8 +1,7 @@
 /* ===== Семейные квесты — серверная часть (Google Apps Script) =====
    Каждые 5 минут: напоминания об обязательных делах, вечернее зачисление,
-   уведомления родителям о заявках, подарки,
-   ИИ-проверка фото через Gemini.
-   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, GEMINI_KEY, GEMINI_MODEL, SUPPORT_EMAIL, ADMIN_EMAIL (или ADMIN_UID). */
+   уведомления родителям о заявках, подарки.
+   Свойства скрипта: PROJECT_ID (обязательно), APP_URL, SUPPORT_EMAIL, ADMIN_EMAIL (или ADMIN_UID). */
 
 var P = PropertiesService.getScriptProperties();
 function prop(k, d) { return P.getProperty(k) || d; }
@@ -166,37 +165,6 @@ function titleFor(m, title, item) {
   return en && (item.title === title || !item.title) ? en : title;
 }
 
-/* ---------- Gemini ---------- */
-function aiCheck(e, task, kid, photos, lang) {
-  var key = prop("GEMINI_KEY"); if (!key || !photos.length) return null;
-  var prompt = "Ты помогаешь родителям проверять фото-отчёты детей о домашних делах и учёбе.\n" +
-    "Ребёнку " + (kid && kid.age || "") + " лет. Задание: «" + e.title + "».\n" +
-    (e.checks && e.checks.length ? "Пункты, которые ребёнок отметил как выполненные:\n- " + e.checks.join("\n- ") + "\n" : "") +
-    "Посмотри на фото и оцени, видно ли, что задание выполнено. Будь доброжелательным, но честным: если на фото беспорядок, нет результата или фото не относится к заданию, это \"redo\". Если по фото понять нельзя, это \"unsure\".\n" +
-    "Ответь только JSON: {\"verdict\":\"ok\"|\"redo\"|\"unsure\",\"comment\":\"1–2 коротких предложения для ребёнка " + (lang === "en" ? "на английском языке (in English)" : "на русском") + ": что видно и что исправить\"}";
-  var parts = [{ text: prompt }];
-  photos.forEach(function (d) { var m = /^data:(image\/[a-z]+);base64,(.*)$/.exec(d || ""); if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } }); });
-  var model = prop("GEMINI_MODEL", "gemini-3.5-flash-lite");
-  var r = UrlFetchApp.fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
-    method: "post", contentType: "application/json", muteHttpExceptions: true,
-    payload: JSON.stringify({ contents: [{ role: "user", parts: parts }], generationConfig: { temperature: 0.2, responseMimeType: "application/json" } }) });
-  if (r.getResponseCode() !== 200) { console.error("Gemini " + r.getResponseCode() + " " + r.getContentText().slice(0, 300)); return null; }
-  try {
-    var txt = JSON.parse(r.getContentText()).candidates[0].content.parts[0].text;
-    var res = JSON.parse(txt.replace(/^```json|```$/g, "").trim());
-    var v = ["ok", "redo", "unsure"].indexOf(res.verdict) >= 0 ? res.verdict : "unsure";
-    return { verdict: v, comment: String(res.comment || "").slice(0, 300) };
-  } catch (err) { console.error("Gemini parse " + err); return null; }
-}
-
-/** Проверка ключа Gemini: выберите testAI и нажмите «Выполнить». */
-function testAI() {
-  if (!prop("GEMINI_KEY")) { console.log("Нет свойства GEMINI_KEY"); return; }
-  var img = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCABAAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD06iiiuU2CisXxF4i/sD7P/on2jz93/LTbtxj2PrWL/wALE/6hX/kx/wDY1108FXqxU4Run5oylVhF2bO0ori/+Fif9Qr/AMmP/saP+Fif9Qr/AMmP/sa0/s7Ffy/iv8yfb0+52lFZnh/Wv7dsXuvs/kbJTHt37s4AOc4HrWnXHOEqcnGW6NU1JXQUUUVBQUUUUAFFFZ134h0qxuXtrm62SpjcvlscZGeoHoaG0twSb2Oc+In/ADDv+2v/ALJXFV1PjTVbLVfsX2KYzeV5m/5GGM7cdR7GuX2N/dP5V9Rl9WCw0U5Lr+bPOrwl7R6CUUuxv7p/KjY390/lXd7Wn/MvvMeSXY9B8Af8gKb/AK+W/wDQVrp64nwfrWn6ZpMsF5ceVI05cLsY8bVHYexrf/4SzRP+f3/yE/8AhXyWMnF4idn1PUpRlyLQ16KyP+Es0T/n9/8AIT/4Uf8ACWaJ/wA/v/kJ/wDCuXmXc05X2NeisuHxNo9xNHDFebpJGCqPLcZJOB2rUppp7Caa3CvOPFn/ACMt3/wD/wBAWvR6848Wf8jLd/8AAP8A0Bazq7GlL4jHooornOgKKKKACiiigAooooAuaP8A8hqx/wCvmP8A9CFep15Zo/8AyGrH/r5j/wDQhXqdb0tjCrugrzjxZ/yMt3/wD/0Ba9HrF1DwpYalfSXk0twskmMhGUDgAdx7VU4trQmElF6nnVFd5/wg2mf897v/AL7X/wCJo/4QbTP+e93/AN9r/wDE1l7ORr7SJwdFd5/wg2mf897v/vtf/iaP+EG0z/nvd/8Afa//ABNHs5B7SJwdFd5/wg2mf897v/vtf/iaP+EG0z/nvd/99r/8TR7OQe0icHRXef8ACDaZ/wA97v8A77X/AOJo/wCEG0z/AJ73f/fa/wDxNHs5B7SJx+j/APIasf8Ar5j/APQhXqdYFt4N061uorhJrkvE4dQzLgkHPPy1v1rCLS1MpyUnof/Z";
-  var r = aiCheck({ title: "Убрать на столе", checks: ["Стол разобран"] }, null, { age: 10 }, [img]);
-  console.log(r ? "Gemini отвечает (" + prop("GEMINI_MODEL", "gemini-3.5-flash-lite") + "): " + JSON.stringify(r) : "Gemini не ответил — см. ошибку выше");
-}
-
 /* ---------- Обработка семьи ---------- */
 function minutes(hhmm) { var p = String(hhmm || "").split(":"); return +p[0] * 60 + +p[1]; }
 function processFamily(fam) {
@@ -268,28 +236,9 @@ function processFamily(fam) {
     });
   }
 
-  // 3. ИИ-проверка фото и уведомления родителям о новых заявках.
+  // 3. Уведомления родителям о новых заявках.
   var pending = data.entries.filter(function (e) { return e.status === "pending" && e.type !== "game"; });
   var fresh = pending.filter(function (e) { return now - e.at < 3 * 3600e3 && once("p_" + e.id + "_" + e.at); });
-  var aiDone = 0;
-  pending.forEach(function (e) {
-    if (e.type !== "task" || !e.photos || !e.photos.length || aiDone >= 3) return;
-    if (e.dec && e.dec.ai && e.dec.ai.forAt === e.at) return;
-    if (!prop("GEMINI_KEY") || !once("a_" + e.id + "_" + e.at)) return;
-    aiDone++;
-    var pics = fsBatchGet(e.photos.map(function (p) { return "families/" + fid + "/photos/" + p; })).map(function (x) { return x.data; });
-    var task = (cfg.tasks || {})[e.ref] || {}, kid = kids.filter(function (k) { return k.id === e.kid; })[0];
-    var km = kidMembers(e.kid)[0];
-    var ai = aiCheck(e, task, kid, pics, km && km.lang); if (!ai) return;
-    ai.forAt = e.at;
-    var d = {}; d[e.id] = { ai: ai }; var mask = ["d." + e.id + ".ai"];
-    if (cfg.settings && cfg.settings.autoAI && ai.verdict === "ok") {
-      d[e.id].status = "ok"; d[e.id].note = ai.comment; d[e.id].decidedAt = Date.now();
-      mask.push("d." + e.id + ".status", "d." + e.id + ".note", "d." + e.id + ".decidedAt");
-      fresh = fresh.filter(function (x) { return x.id !== e.id; });
-    }
-    fsPatch("families/" + fid + "/plog/" + e.doc, { d: d }, mask);
-  });
   if (fresh.length) {
     parents.forEach(function (m) {
       var en = isEn(m);

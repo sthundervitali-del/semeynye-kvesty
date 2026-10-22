@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.11.2", APP_DATE = "20.10.2026";
+const APP_VERSION = "2.12.0", APP_DATE = "22.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -122,7 +122,7 @@ function demoSeed(store, user) {
   g.fillStyle = "#333"; g.font = "20px sans-serif"; g.fillText("фото комнаты (демо)", 140, 320);
   store.photos[pid] = { data: c.toDataURL("image/jpeg", .7), kid: "k1", at: now };
   put("k1", { id: "edemo1", kid: "k1", type: "task", ref: room.id, title: room.title, pts: room.pts, day: t0, at: now - 9e5, checks: room.checklist, photos: [pid] },
-      { status: "", ai: { verdict: "ok", comment: "Стол разобран, на полу чисто. Молодец!", forAt: now - 9e5 } });
+      { status: "" });
   const wish = Object.values(set.wishes)[1];
   put("k2", { id: "edemo2", kid: "k2", type: "wish", ref: wish.id, title: wish.title, pts: wish.cost, day: t0, at: now - 3e5 }, null);
   const doc = "k1_" + F.monthKey();
@@ -449,7 +449,6 @@ function dayPanel(kid, s, parentMode) {
 }
 
 /* ====================== РОДИТЕЛЬ ====================== */
-const AIL = { ok: "похоже, выполнено", redo: "похоже, нужна доработка", unsure: "не уверен" };
 function startCard() {
   const hasTasks = F.live(S.cfg.tasks).some(t => t.active !== false);
   const hasWishes = F.live(S.cfg.wishes).length > 0;
@@ -469,12 +468,11 @@ function parentReview() {
   if (!pend.length) out += `<div class="empty">${ic("check-circle")}Всё проверено. Новых заявок нет.</div>`;
   else out += pend.map(e => {
     const k = kidById(e.kid);
-    const ai = e.dec?.ai && e.dec.ai.forAt === e.at ? `<div class="ai">${ic("sparkle", "xs")} ИИ: <b class="${e.dec.ai.verdict}">${AIL[e.dec.ai.verdict] || ""}</b>${e.dec.ai.comment ? ` — ${esc(e.dec.ai.comment)}` : ""}</div>` : (e.photos?.length ? `<div class="ai hint">${ic("sparkle", "xs")} ИИ посмотрит фото в течение 5 минут</div>` : "");
     const photos = e.photos?.length ? `<div class="photos">${e.photos.map(p => S.photos[p] ? `<button class="ph" data-act="zoom" data-id="${p}" aria-label="Открыть фото"><img src="${S.photos[p]}" alt=""></button>` : `<span class="ph" data-photo="${p}">загрузка…</span>`).join("")}</div>` : "";
     const btns = e.type === "wish" ? `<button class="btn ok sm" data-act="approve" data-id="${e.id}">Выдать</button><button class="btn no sm" data-act="reject" data-id="${e.id}">Отказать</button>`
       : `<button class="btn ok sm" data-act="approve" data-id="${e.id}">Принять</button><button class="btn sm ghost" data-act="redo" data-id="${e.id}">На доработку</button><button class="btn no sm" data-act="reject" data-id="${e.id}">Не засчитать</button>`;
     return `<div class="req"><div><b>${e.type === "wish" ? `${ic("gift", "xs gold")} Хочет обменять: ` : ""}${esc(e.title)}</b><br><small class="hint">${esc(k?.name || "")} · ${humanDay(e.day)}, ${fmtTime(e.at)} · <span class="num">${e.type === "wish" ? "−" : "+"}${e.value}</span>${F.mult(S.cfg, e.day, e.ref) > 1 && e.type === "task" ? " (×2)" : ""}${e.late ? " · с опозданием" : ""}${e.manual ? " · засчитано родителем" : ""}</small></div>
-      ${e.checks?.length ? `<ul class="checks-ro">${e.checks.map(c => `<li>${ic("check", "xs")} ${esc(c)}</li>`).join("")}</ul>` : ""}${photos}${e.resent ? `<small class="hint">Прислано повторно после доработки</small>` : ""}${ai}
+      ${e.checks?.length ? `<ul class="checks-ro">${e.checks.map(c => `<li>${ic("check", "xs")} ${esc(c)}</li>`).join("")}</ul>` : ""}${photos}${e.resent ? `<small class="hint">Прислано повторно после доработки</small>` : ""}
       ${e.type === "task" ? `<label class="inline instant"><input type="checkbox" data-instant="${e.id}" ${S.instant.has(e.id) ? "checked" : ""}> Сразу в банк — баллы можно потратить сейчас, не дожидаясь воскресенья</label>` : ""}
       <div class="act">${btns}</div></div>`;
   }).join("");
@@ -658,6 +656,92 @@ document.addEventListener("pointerdown", e => {
   h.addEventListener("pointermove", move); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
   document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 });
+/* Просмотр фото: на весь экран, листание, увеличение щипком, двойным касанием, колёсиком и кнопками. */
+function openViewer(srcs, start = 0) {
+  if (!srcs.length) return;
+  document.querySelector(".viewer")?.remove();
+  let idx = Math.min(start, srcs.length - 1), sc = 1, tx = 0, ty = 0;
+  const v = document.createElement("div"); v.className = "viewer"; v.setAttribute("role", "dialog"); v.setAttribute("aria-modal", "true"); v.setAttribute("aria-label", tr("Фото-отчёт"));
+  const many = srcs.length > 1;
+  v.innerHTML = `<div class="vw-stage"><img class="vw-img" alt="${tr("Фото-отчёт")}" draggable="false"></div>
+    <div class="vw-top"><span class="vw-count num"></span><button class="vw-btn" data-v="close" aria-label="${tr("Закрыть")}">${ic("x")}</button></div>
+    ${many ? `<button class="vw-btn vw-nav prev" data-v="prev" aria-label="${tr("Предыдущее фото")}">${ic("chev-l")}</button><button class="vw-btn vw-nav next" data-v="next" aria-label="${tr("Следующее фото")}">${ic("chev-r")}</button>` : ""}
+    <div class="vw-bar"><button class="vw-btn" data-v="out" aria-label="${tr("Уменьшить")}">${ic("minus")}</button><button class="vw-btn vw-pct num" data-v="reset" aria-label="${tr("Исходный размер")}">100%</button><button class="vw-btn" data-v="in" aria-label="${tr("Увеличить")}">${ic("plus")}</button></div>`;
+  const stage = v.querySelector(".vw-stage"), img = v.querySelector(".vw-img"), cnt = v.querySelector(".vw-count"), pct = v.querySelector(".vw-pct");
+  const clamp = () => {
+    if (sc <= 1) { sc = 1; tx = 0; ty = 0; return; }
+    const r = stage.getBoundingClientRect(), w = img.offsetWidth * sc, h = img.offsetHeight * sc;
+    const mx = Math.max(0, (w - r.width) / 2), my = Math.max(0, (h - r.height) / 2);
+    tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty));
+  };
+  const apply = (anim) => { clamp(); img.style.transition = anim ? "transform .2s ease" : "none"; img.style.transform = `translate(${tx}px,${ty}px) scale(${sc})`; pct.textContent = Math.round(sc * 100) + "%"; v.classList.toggle("zoomed", sc > 1); };
+  // Увеличение вокруг точки (cx, cy) в координатах экрана.
+  const zoomAt = (ns, cx, cy, anim) => {
+    ns = Math.max(1, Math.min(6, ns));
+    const r = stage.getBoundingClientRect(), ox = cx - (r.left + r.width / 2), oy = cy - (r.top + r.height / 2);
+    tx = ox - (ox - tx) * ns / sc; ty = oy - (oy - ty) * ns / sc; sc = ns; apply(anim);
+  };
+  const center = () => { const r = stage.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  const show = i => { idx = (i + srcs.length) % srcs.length; sc = 1; tx = ty = 0; img.src = srcs[idx]; cnt.textContent = many ? `${idx + 1} / ${srcs.length}` : ""; apply(false); };
+  const close = () => { v.remove(); document.removeEventListener("keydown", key, true); };
+  const key = e => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === "ArrowRight" && many) show(idx + 1);
+    else if (e.key === "ArrowLeft" && many) show(idx - 1);
+    else if (e.key === "+" || e.key === "=") zoomAt(sc * 1.5, ...center(), true);
+    else if (e.key === "-") zoomAt(sc / 1.5, ...center(), true);
+  };
+  document.addEventListener("keydown", key, true);
+  v.addEventListener("click", e => {
+    const b = e.target.closest("[data-v]"); if (!b) return;
+    const a = b.dataset.v;
+    if (a === "close") close(); else if (a === "prev") show(idx - 1); else if (a === "next") show(idx + 1);
+    else if (a === "in") zoomAt(sc * 1.5, ...center(), true); else if (a === "out") zoomAt(sc / 1.5, ...center(), true); else if (a === "reset") zoomAt(1, ...center(), true);
+  });
+  stage.addEventListener("wheel", e => { e.preventDefault(); zoomAt(sc * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY, false); }, { passive: false });
+  // Указатели: один палец/мышь — сдвиг или листание, два пальца — щипок.
+  const pts = new Map(); let start0 = null, pinch = null, lastTap = 0, moved = false;
+  stage.addEventListener("pointerdown", e => {
+    if (e.target.closest("[data-v]")) return;
+    stage.setPointerCapture?.(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { start0 = { x: e.clientX, y: e.clientY, tx, ty }; moved = false; }
+    if (pts.size === 2) { const [p1, p2] = [...pts.values()]; pinch = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y), sc, cx: (p1.x + p2.x) / 2, cy: (p1.y + p2.y) / 2, tx, ty }; start0 = null; moved = true; }
+  });
+  stage.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size >= 2) {
+      const [p1, p2] = [...pts.values()], d = Math.hypot(p1.x - p2.x, p1.y - p2.y), cx = (p1.x + p2.x) / 2, cy = (p1.y + p2.y) / 2;
+      sc = pinch.sc; tx = pinch.tx + (cx - pinch.cx); ty = pinch.ty + (cy - pinch.cy);
+      zoomAt(pinch.sc * d / pinch.d, cx, cy, false); return;
+    }
+    if (!start0) return;
+    const dx = e.clientX - start0.x, dy = e.clientY - start0.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+    if (sc > 1) { tx = start0.tx + dx; ty = start0.ty + dy; apply(false); }
+    else if (many) { img.style.transition = "none"; img.style.transform = `translateX(${dx}px)`; }
+  });
+  const end = e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pinch) { if (pts.size < 2) { pinch = null; const rest = [...pts.values()].at(0); start0 = rest ? { x: rest.x, y: rest.y, tx, ty } : null; if (sc < 1.05) zoomAt(1, ...center(), true); } return; }
+    if (!start0) return;
+    const dx = e.clientX - start0.x, dy = e.clientY - start0.y; start0 = null;
+    if (sc <= 1 && many && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { show(idx + (dx < 0 ? 1 : -1)); return; }
+    if (sc <= 1 && Math.abs(dy) > 120 && Math.abs(dy) > Math.abs(dx)) { close(); return; }
+    if (sc <= 1) apply(true);
+    if (moved || e.type === "pointercancel") return;
+    const now = Date.now();
+    if (now - lastTap < 300) { lastTap = 0; zoomAt(sc > 1 ? 1 : 2.5, e.clientX, e.clientY, true); return; }
+    lastTap = now;
+    // Одно касание по фону (не по фото) закрывает просмотр.
+    const r = img.getBoundingClientRect(), inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    setTimeout(() => { if (lastTap === now && sc <= 1 && !inside) close(); }, 300);
+  };
+  stage.addEventListener("pointerup", end); stage.addEventListener("pointercancel", end);
+  stage.addEventListener("dblclick", e => e.preventDefault());
+  v.tabIndex = -1; document.body.appendChild(v); show(idx); v.focus({ preventScroll: true });
+}
 function templatePicker({ title, hint, groups, used, onAdd }) {
   const rows = [];
   modal(`<div class="sub-head"><h2>${ic("layers", "h")} ${title}</h2></div><p class="hint">${hint}</p>
@@ -739,7 +823,7 @@ function parentSettings() {
     </div></div>
     <div class="set-group"><h3>Правила</h3><div class="set-list">
       ${row("points", "trophy", "gold", "Баллы", `Зачисление в ${esc(F.creditTime(S.cfg))}, трата после воскресенья`)}
-      ${row("check", "camera", "rose", "Проверка и фото", `${st.autoAI ? "Автоприём по ИИ" : "Решает родитель"} · фото хранятся ${photoLabel(photoDays())}`)}
+      ${row("check", "camera", "rose", "Проверка и фото", `Фото хранятся ${photoLabel(photoDays())}`)}
     </div></div>
     <div class="set-group"><h3>Это устройство</h3><div class="set-list">
       ${row("notify", "bell", "green", "Уведомления", pushState())}
@@ -781,7 +865,6 @@ function settingsPage(p) {
       <div><button class="btn go">Сохранить</button></div></form>
       <ul class="facts"><li>${ic("check", "xs")} Баллы за принятые дела зачисляются каждый вечер в это время.</li><li>${ic("check", "xs")} Тратить их можно после воскресенья в это же время.</li><li>${ic("check", "xs")} Подарки и бонусы доступны сразу.</li><li>${ic("check", "xs")} Двойные баллы на конкретный день включаются в «Календаре».</li></ul></section>`;
   if (p === "check") return head("Проверка и фото") + `<section class="card"><form class="grid" data-form="set-check">
-      <label class="inline full"><input id="s-ai" name="ai" type="checkbox" ${st.autoAI ? "checked" : ""}> Принимать задание автоматически, если ИИ уверен, что по фото всё выполнено</label>
       <label>Хранить фото-отчёты<select id="s-ph" name="ph">${[[7, "1 неделю"], [14, "2 недели"], [30, "1 месяц"], [90, "3 месяца"], [0, "Свой срок…"]].map(([d, n]) => `<option value="${d}" ${(d === photoDays() && [7, 14, 30, 90].includes(d)) || (d === 0 && ![7, 14, 30, 90].includes(photoDays())) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <label id="s-phd-l" ${[7, 14, 30, 90].includes(photoDays()) ? "hidden" : ""}>Свой срок, дней<input id="s-phd" name="phd" type="number" inputmode="numeric" min="1" max="365" value="${photoDays()}"></label>
       <div class="full"><button class="btn go">Сохранить</button></div></form>
@@ -896,7 +979,7 @@ function wishApprove(e) {
   m => { m.querySelector("#wish-ok").onclick = () => { decide(e, "ok", m.querySelector("#wish-note").value.trim()); closeModal(); }; });
 }
 function redoForm(e) {
-  const pre = e.dec?.ai && e.dec.ai.forAt === e.at && e.dec.ai.verdict !== "ok" ? e.dec.ai.comment : "";
+  const pre = "";
   modal(`<h2>На доработку</h2><p class="hint">«${esc(e.title)}». Ребёнок увидит текст как замечание проверки.</p>
     <label>Что исправить<textarea id="redo-note" placeholder="Например: на столе ещё лежат тетради.">${esc(pre)}</textarea></label>
     <div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn go" id="redo-ok">Отправить на доработку</button></div>`,
@@ -904,7 +987,7 @@ function redoForm(e) {
     m.querySelector("#redo-ok").onclick = () => { decide(e, "redo", ta.value.trim()); closeModal(); }; });
 }
 function decide(e, status, note, instant) {
-  const dec = { status, note: note ?? (status === "ok" && e.dec?.ai?.verdict === "ok" && e.dec.ai.forAt === e.at ? e.dec.ai.comment : ""), decidedAt: Date.now(), ai: e.dec?.ai || null, instant: !!(instant && status === "ok") };
+  const dec = { status, note: note ?? "", decidedAt: Date.now(), instant: !!(instant && status === "ok") };
   S.instant.delete(e.id);
   S.be.putDecision(e.doc, e.id, dec).then(() => toast(status === "ok" ? (e.type === "wish" ? "Награда выдана" : dec.instant ? `Принято: +${e.value}, сразу в банк` : `Принято: +${e.value}`) : status === "redo" ? "Отправлено на доработку" : e.type === "wish" ? "Отказано, баллы вернулись" : "Не засчитано")).catch(fail);
 }
@@ -988,14 +1071,15 @@ function submitTask(t, entryId) {
   const picked = [];
   modal(`<h2>${esc(t.title)}</h2>
     ${t.checklist?.length ? `<p class="hint">Отметь всё, что сделано:</p><div class="checks">${t.checklist.map((c, i) => `<label class="chk"><input type="checkbox" id="ck-${i}" data-c="${i}"> ${esc(c)}</label>`).join("")}</div>` : ""}
-    <p class="hint">${t.photo ? "Сфотографируй результат — система проверит фото. До 3 снимков." : "Фото можно добавить по желанию."}</p><div class="photos" id="phs"></div>
+    <p class="hint">${t.photo ? "Сфотографируй результат — родитель посмотрит фото. До 3 снимков." : "Фото можно добавить по желанию."}</p><div class="photos" id="phs"></div>
     <p class="err" id="sub-err"></p><div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn go" id="sub-ok">Отправить на проверку</button></div>`,
   m => {
     const box = m.querySelector("#phs");
     const draw = () => {
-      box.innerHTML = picked.map((p, i) => `<div class="ph"><img src="${p.url}" alt=""><button class="x" data-rm="${i}" aria-label="Убрать фото">×</button></div>`).join("") + (picked.length < 3 ? `<label class="addph">${ic("camera")}<span>Добавить фото</span><input type="file" id="ph-in" accept="image/*" multiple></label>` : "");
+      box.innerHTML = picked.map((p, i) => `<div class="ph"><img src="${p.url}" alt="" data-view="${i}"><button class="x" data-rm="${i}" aria-label="Убрать фото">×</button></div>`).join("") + (picked.length < 3 ? `<label class="addph">${ic("camera")}<span>Добавить фото</span><input type="file" id="ph-in" accept="image/*" multiple></label>` : "");
       const inp = box.querySelector("#ph-in"); if (inp) inp.onchange = () => { for (const f of inp.files) if (picked.length < 3 && f.type.startsWith("image/")) picked.push({ file: f, url: URL.createObjectURL(f) }); draw(); };
       box.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { picked.splice(+b.dataset.rm, 1); draw(); });
+      box.querySelectorAll("[data-view]").forEach(im => im.onclick = () => openViewer(picked.map(x => x.url), +im.dataset.view));
     };
     draw();
     const ok = m.querySelector("#sub-ok"), err = m.querySelector("#sub-err");
@@ -1096,15 +1180,15 @@ document.addEventListener("click", e => {
   }
   if (act === "approve" || act === "reject") { const en = S.data.entries.find(x => x.id === id); if (!en) return; if (act === "approve" && en.type === "wish") return wishApprove(en); decide(en, act === "approve" ? "ok" : "no", undefined, act === "approve" && S.instant.has(id)); return; }
   if (act === "redo") { const en = S.data.entries.find(x => x.id === id); if (en) redoForm(en); return; }
-  if (act === "undo") { const en = S.data.entries.find(x => x.id === id); if (en) S.be.putDecision(en.doc, en.id, { status: "", note: "", decidedAt: Date.now(), ai: en.dec?.ai || null }).then(() => toast("Решение отменено — заявка снова на проверке")).catch(fail); return; }
-  if (act === "zoom") { const l = document.createElement("div"); l.className = "light"; l.innerHTML = `<img src="${S.photos[id]}" alt="Фото-отчёт">`; l.onclick = () => l.remove(); document.body.appendChild(l); return; }
+  if (act === "undo") { const en = S.data.entries.find(x => x.id === id); if (en) S.be.putDecision(en.doc, en.id, { status: "", note: "", decidedAt: Date.now() }).then(() => toast("Решение отменено — заявка снова на проверке")).catch(fail); return; }
+  if (act === "zoom") { const ids = [...(el.closest(".photos")?.querySelectorAll("[data-act=zoom]") || [el])].map(b => b.dataset.id); openViewer(ids.map(x => S.photos[x]).filter(Boolean), Math.max(0, ids.indexOf(id))); return; }
   if (act === "taskForm") return taskForm(id, el.dataset.cat);
   if (act === "wishForm") return wishForm(id);
   if (act === "credit") {
     const t = S.cfg.tasks[id], kid = el.dataset.kid, s = S.selDay; if (!t) return;
     ask(`Засчитать «${t.title}» за ${humanDay(s)}?`, "Засчитать", async () => {
       const e2 = { id: uid(), kid, type: "task", ref: t.id, title: t.title, pts: t.pts, day: s, at: Date.now(), checks: [], photos: [], resent: false, manual: true };
-      try { await S.be.putEntry(kid, s.slice(0, 7), e2); await S.be.putDecision(kid + "_" + s.slice(0, 7), e2.id, { status: "ok", note: "", decidedAt: Date.now(), ai: null }); toast(`Засчитано: +${t.pts * F.mult(S.cfg, s, t.id)}`); } catch (err) { fail(err); }
+      try { await S.be.putEntry(kid, s.slice(0, 7), e2); await S.be.putDecision(kid + "_" + s.slice(0, 7), e2.id, { status: "ok", note: "", decidedAt: Date.now() }); toast(`Засчитано: +${t.pts * F.mult(S.cfg, s, t.id)}`); } catch (err) { fail(err); }
     }); return;
   }
   if (act === "selDay") { S.selDay = id; render(); return; }
@@ -1161,7 +1245,7 @@ document.addEventListener("submit", e => {
     return;
   }
   if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00" } }).then(saved).catch(fail);
-  if (kind === "set-check") { const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14)); S.be.setFamily({ settings: { autoAI: f.ai.checked, photoDays: ph } }).then(saved).catch(fail); }
+  if (kind === "set-check") { const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14)); S.be.setFamily({ settings: { autoAI: false, photoDays: ph } }).then(saved).catch(fail); }
   if (kind === "delFamily") {
     const err = document.getElementById("del-err");
     if (f.name.value.trim().toLowerCase() !== String(S.cfg.name || "").trim().toLowerCase()) { err.textContent = tr("Название не совпадает. Введите его точно так же, как в настройках."); return; }
@@ -1176,7 +1260,7 @@ document.addEventListener("submit", e => {
 document.addEventListener("change", e => {
   if (e.target.id === "s-ph") { const l = document.getElementById("s-phd-l"); if (l) l.hidden = e.target.value !== "0"; }
 });
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); document.querySelector(".light")?.remove(); } });
+document.addEventListener("keydown", e => { if (document.querySelector(".viewer")) return; if (e.key === "Escape") closeModal(); });
 window.addEventListener("fq-push", e => { toast((e.detail.title || "") + (e.detail.body ? ": " + e.detail.body : ""), true); beep("alert"); });
 
 /* ====================== ЗАПУСК ====================== */
