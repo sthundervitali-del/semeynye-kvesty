@@ -90,34 +90,93 @@ var FQ = (function () {
   }
   function mult(cfg, s, taskId) { var d = cfg && cfg.days && cfg.days[s]; return d && d.x2 && d.x2.indexOf(taskId) >= 0 ? 2 : 1; }
 
+  /* Записи ребёнка приходят из базы, куда он пишет сам, поэтому каждое поле проверяется:
+     в приложение попадают только ожидаемые типы (защита от подмены и внедрения кода). */
+  var ID_RE = /^[A-Za-z0-9_-]{1,64}$/, DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  function num(v, lo, hi) { v = Number(v); return isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 0; }
+  function str(v, max) { return typeof v === "string" ? v.slice(0, max) : ""; }
+  function strList(v, max, re) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === "string" && (!re || re.test(x)); }).slice(0, max).map(function (x) { return x.slice(0, 300); }) : []; }
+  function cleanEntry(x, kid) {
+    if (!x || typeof x !== "object" || typeof x.id !== "string" || !ID_RE.test(x.id)) return null;
+    var type = x.type === "wish" || x.type === "game" ? x.type : x.type === "task" ? "task" : null;
+    if (!type || typeof x.day !== "string" || !DAY_RE.test(x.day)) return null;
+    return {
+      id: x.id, kid: kid, type: type, day: x.day, at: num(x.at, 0, 1e13),
+      ref: typeof x.ref === "string" && ID_RE.test(x.ref) ? x.ref : "",
+      title: str(x.title, 200), pts: num(x.pts, 0, 100000),
+      checks: strList(x.checks, 30), photos: strList(x.photos, 3, ID_RE),
+      late: x.late === true, latePct: x.latePct == null ? null : num(x.latePct, 0, 100),
+      resent: x.resent === true, manual: x.manual === true, withdrawn: x.withdrawn === true,
+      cancelled: x.cancelled === true, minutes: num(x.minutes, 0, 1440)
+    };
+  }
+  // Сколько стоит запись: дело — не дороже, чем назначили родители; награда — не дешевле её цены.
+  function entryValue(x, cfg) {
+    var pts = x.pts;
+    if (x.type === "task") {
+      var t = cfg && cfg.tasks && cfg.tasks[x.ref];
+      if (t && isFinite(+t.pts)) pts = Math.min(pts, +t.pts);
+      pts = pts * mult(cfg, x.day, x.ref);
+      if (x.late) pts = Math.round(pts * (x.latePct == null ? 50 : x.latePct) / 100);
+    } else if (x.type === "wish") {
+      var w = cfg && cfg.wishes && cfg.wishes[x.ref];
+      if (w && isFinite(+w.cost)) pts = Math.max(pts, +w.cost);
+    }
+    return pts;
+  }
+  // Снимок записи в решении родителя: после проверки сумма и суть записи берутся отсюда,
+  // и изменить или удалить их со стороны ребёнка уже нельзя.
+  function snapshot(e) { return { type: e.type, ref: e.ref, title: e.title, day: e.day, at: e.at, value: e.value }; }
+  function kidOfDoc(id) { var i = String(id).lastIndexOf("_"); return i > 0 ? String(id).slice(0, i) : ""; }
+
   /* ---------- записи и решения ----------
      kidlog/{kid_YYYY-MM}.e[id]  — что сделал ребёнок (task | wish | game)
-     plog/{kid_YYYY-MM}.d[id]    — решение проверки {status, note, decidedAt, ai}
+     plog/{kid_YYYY-MM}.d[id]    — решение проверки {status, note, decidedAt, instant, snap}
      plog/{kid_YYYY-MM}.g[id]    — подарки и бонусы родителей */
   function merge(kidlogs, plogs, cfg) {
     var entries = [], gifts = [];
-    var pmap = {};
+    var pmap = {}, seen = {};
     (plogs || []).forEach(function (p) { pmap[p.id] = p; (function (g) { for (var k in g) gifts.push(g[k]); })(p.g || {}); });
     (kidlogs || []).forEach(function (doc) {
-      var p = pmap[doc.id] || {};
+      var p = pmap[doc.id] || {}, kid = kidOfDoc(doc.id);
       var e = doc.e || {};
       for (var k in e) {
-        var x = e[k]; if (!x || !x.id) continue;
-        if (x.withdrawn) continue; // ребёнок отменил заявку
+        var x = cleanEntry(e[k], kid); if (!x) continue;
         var dec = (p.d || {})[x.id] || null;
+        var snap = dec && dec.status && dec.snap && typeof dec.snap === "object" ? dec.snap : null;
+        var resubmitted = dec && dec.status === "redo" && x.at > (dec.decidedAt || 0);
+        if (x.withdrawn && !(dec && dec.status && !resubmitted)) continue; // ребёнок отменил заявку до проверки
+        seen[doc.id + "/" + x.id] = true;
         var status;
         if (x.type === "game") status = x.cancelled ? "no" : "ok";
         else if (!dec || !dec.status) status = "pending";
-        else if (dec.status === "redo" && x.at > (dec.decidedAt || 0)) status = "pending";
+        else if (resubmitted) status = "pending";
         else status = dec.status;
-        var pts = x.type === "task" ? (x.pts || 0) * mult(cfg, x.day, x.ref) : (x.pts || 0);
-        if (x.type === "task" && x.late) pts = Math.round(pts * (x.latePct == null ? 50 : x.latePct) / 100);
-        entries.push(Object.assign({}, x, { status: status, dec: dec, value: pts, doc: doc.id }));
+        var value = entryValue(x, cfg);
+        if (snap && !resubmitted) { x = applySnap(x, snap); value = num(snap.value, 0, 1e6); }
+        entries.push(Object.assign(x, { status: status, dec: dec, value: value, doc: doc.id }));
+      }
+    });
+    // Проверенные записи, которые ребёнок удалил у себя, восстанавливаются из снимка в решении.
+    (plogs || []).forEach(function (p) {
+      var d = p.d || {}, kid = kidOfDoc(p.id);
+      for (var id in d) {
+        var dec = d[id];
+        if (seen[p.id + "/" + id] || !dec || !dec.status || !dec.snap || !ID_RE.test(id)) continue;
+        var x = cleanEntry({ id: id, type: dec.snap.type, day: dec.snap.day, at: dec.snap.at, ref: dec.snap.ref, title: dec.snap.title, pts: dec.snap.value }, kid);
+        if (!x) continue;
+        entries.push(Object.assign(x, { status: dec.status, dec: dec, value: num(dec.snap.value, 0, 1e6), doc: p.id }));
       }
     });
     entries.sort(function (a, b) { return a.at - b.at; });
     gifts.sort(function (a, b) { return a.at - b.at; });
     return { entries: entries, gifts: gifts };
+  }
+  function applySnap(x, sn) {
+    var y = cleanEntry({ id: x.id, type: sn.type, day: sn.day, at: sn.at, ref: sn.ref, title: sn.title, pts: sn.value }, x.kid);
+    if (!y) return x;
+    y.checks = x.checks; y.photos = x.photos; y.resent = x.resent; y.manual = x.manual; y.late = x.late; y.latePct = x.latePct; y.minutes = x.minutes;
+    return y;
   }
 
   function creditTime(cfg) { return (cfg && cfg.settings && cfg.settings.creditTime) || "21:00"; }
@@ -200,6 +259,7 @@ var FQ = (function () {
   }
 
   return {
+    snapshot: snapshot, cleanEntry: cleanEntry,
     pad: pad, dayKey: dayKey, monthKey: monthKey, parseDay: parseDay, addDays: addDays, isoDow: isoDow,
     weekStart: weekStart, weekEnd: weekEnd, atTime: atTime, orthodoxEaster: orthodoxEaster, radunitsa: radunitsa,
     dayInfo: dayInfo, category: category, CATEGORY_NAMES: CATEGORY_NAMES, forKid: forKid, live: live, applies: applies,

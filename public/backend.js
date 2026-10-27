@@ -51,8 +51,15 @@ export async function firebaseBackend() {
     async join(user, code) {
       const inv = await this.readInvite(code);
       if (!inv) throw new Error("Код не найден. Проверьте, что он введён без ошибок.");
+      // Уже в этой семье (повторное открытие ссылки) — просто открываем семью.
+      try { if ((await getDoc(doc(db, "families", inv.fid, "members", user.uid))).exists()) { await setDoc(doc(db, "users", user.uid), { families: arrayUnion(inv.fid) }, { merge: true }); return inv.fid; } } catch (_) {}
+      if (inv.usedBy) throw new Error("Этот код уже использован. Попросите новый.");
       if (inv.exp < Date.now()) throw new Error("Срок действия кода истёк. Попросите новый.");
-      await setDoc(doc(db, "families", inv.fid, "members", user.uid), { role: inv.role, kidId: inv.kidId || null, code, name: user.displayName || "", email: user.email || "", photo: user.photoURL || "", joinedAt: Date.now(), tokens: [], seen: [] });
+      // Код одноразовый: отметка «использован» и вход в семью — одной операцией.
+      const b = writeBatch(db);
+      b.update(doc(db, "invites", code), { usedBy: user.uid, usedAt: Date.now() });
+      b.set(doc(db, "families", inv.fid, "members", user.uid), { role: inv.role, kidId: inv.kidId || null, code, name: user.displayName || "", email: user.email || "", photo: user.photoURL || "", joinedAt: Date.now(), tokens: [], seen: [] });
+      await b.commit();
       await setDoc(doc(db, "users", user.uid), { families: arrayUnion(inv.fid) }, { merge: true });
       return inv.fid;
     },
@@ -71,6 +78,7 @@ export async function firebaseBackend() {
     putEntry: (kid, month, entry) => setDoc(fam("kidlog", kid + "_" + month), { kid, e: { [entry.id]: entry } }, { merge: true }),
     putTimer: (kid, month, t) => setDoc(fam("kidlog", kid + "_" + month), { kid, t }, { merge: true }),
     putDecision: (docId, id, dec) => setDoc(fam("plog", docId), { d: { [id]: dec } }, { merge: true }),
+    putSnaps: (docId, map) => setDoc(fam("plog", docId), { d: map }, { merge: true }),
     putGift: (docId, g) => setDoc(fam("plog", docId), { g: { [g.id]: g } }, { merge: true }),
     putPhoto: (id, data) => setDoc(fam("photos", id), data),
     async getPhoto(id) { const s = await getDoc(fam("photos", id)); return s.exists() ? s.data().data : null; },
@@ -80,7 +88,7 @@ export async function firebaseBackend() {
     removeMember: u => deleteDoc(fam("members", u)),
     isAdmin: async user => { try { return (await getDoc(doc(db, "admins", user.uid))).exists(); } catch (_) { return false; } },
     watchSupport: (user, admin, cb) => onSnapshot(admin ? collection(db, "support") : query(collection(db, "support"), where("uid", "==", user.uid)),
-      s => cb(s.docs.map(d => d.data())), e => console.warn("support", e)),
+      s => cb(s.docs.map(d => ({ ...d.data(), id: d.id })).filter(r => /^[A-Za-z0-9_-]{1,64}$/.test(r.id))), e => console.warn("support", e)),
     sendSupport: (user, req) => { const id = uid("s"), at = Date.now();
       return setDoc(doc(db, "support", id), { id, uid: user.uid, email: user.email || "", name: user.displayName || "", fid, family: req.family || "", subject: req.subject,
         lang: req.lang || "ru", app: req.app || "", status: "open", thread: [{ from: "user", text: req.text, at }], at, updatedAt: at, userSeenAt: at }); },
@@ -110,7 +118,7 @@ export async function firebaseBackend() {
     },
     async createInvite(user, role, kidId) {
       const code = code8();
-      await setDoc(doc(db, "invites", code), { fid, role, kidId: kidId || null, createdBy: user.uid, exp: Date.now() + 7 * 864e5 });
+      await setDoc(doc(db, "invites", code), { fid, role, kidId: kidId || null, createdBy: user.uid, exp: Date.now() + 2 * 864e5 });
       return code;
     },
     async enablePush(user) {
@@ -181,6 +189,7 @@ export function demoBackend(seedFn) {
     putEntry: async (kid, m, e) => { const id = kid + "_" + m; store.kidlog[id] = deepMerge(store.kidlog[id] || { kid }, { e: { [e.id]: e } }); later(); },
     putTimer: async (kid, m, t) => { const id = kid + "_" + m; store.kidlog[id] = deepMerge(store.kidlog[id] || { kid }, { t }); later(); },
     putDecision: async (doc, id, d) => { store.plog[doc] = deepMerge(store.plog[doc] || {}, { d: { [id]: d } }); later(); },
+    putSnaps: async (doc, map) => { store.plog[doc] = deepMerge(store.plog[doc] || {}, { d: map }); later(); },
     putGift: async (doc, g) => { store.plog[doc] = deepMerge(store.plog[doc] || {}, { g: { [g.id]: g } }); later(); },
     putPhoto: async (id, d) => { store.photos[id] = d; }, getPhoto: async id => store.photos[id]?.data || null, delPhoto: async () => {}, oldPhotos: async () => [],
     updateMember: async (u, p) => { store.members[u] = deepMerge(store.members[u] || {}, p); later(); },

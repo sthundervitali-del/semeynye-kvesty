@@ -18,6 +18,12 @@ service cloud.firestore {
       allow get: if signedIn();
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid && isParent(request.resource.data.fid);
       allow delete: if signedIn() && isParent(resource.data.fid);
+      // Код одноразовый: вошедший отмечает его использованным в той же операции, что и вступление в семью.
+      allow update: if signedIn() && !('usedBy' in resource.data)
+        && resource.data.exp > request.time.toMillis()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.usedBy == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/families/$(resource.data.fid)/members/$(request.auth.uid));
     }
 
     // Администраторы поддержки (назначает сервер-скрипт по свойству ADMIN_UID).
@@ -34,6 +40,7 @@ service cloud.firestore {
     function lastMsg() { return request.resource.data.thread[request.resource.data.thread.size() - 1]; }
     match /support/{id} {
       allow create: if signedIn()
+        && id.matches('[A-Za-z0-9_-]{1,64}') && request.resource.data.id == id
         && request.resource.data.uid == request.auth.uid
         && isParent(request.resource.data.fid)
         && request.resource.data.subject is string && request.resource.data.subject.size() > 0 && request.resource.data.subject.size() <= 120
@@ -69,7 +76,9 @@ service cloud.firestore {
             && invite(request.resource.data.code).fid == fid
             && invite(request.resource.data.code).role == request.resource.data.role
             && invite(request.resource.data.code).kidId == request.resource.data.kidId
-            && invite(request.resource.data.code).exp > request.time.toMillis())
+            && invite(request.resource.data.code).exp > request.time.toMillis()
+            && !('usedBy' in invite(request.resource.data.code))
+            && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.get('usedBy', '') == request.auth.uid)
         );
         allow update: if isParent(fid)
           || (signedIn() && request.auth.uid == uid
@@ -80,10 +89,12 @@ service cloud.firestore {
       // Что сделал ребёнок: задания, заявки на награды, игровое время.
       match /kidlog/{docId} {
         allow read: if isMember(fid);
-        allow write: if isParent(fid)
-          || (isChild(fid)
-              && docId.matches(member(fid).kidId + '_[0-9]{4}-[0-9]{2}')
-              && request.resource.data.kid == member(fid).kidId);
+        allow write: if isParent(fid);
+        // Ребёнок только добавляет и дополняет свои записи; удалить месяц целиком не может.
+        // Проверенные записи защищены снимком в решении родителя (plog), поэтому правка их здесь ни на что не влияет.
+        allow create, update: if isChild(fid)
+          && docId.matches(member(fid).kidId + '_[0-9]{4}-[0-9]{2}')
+          && request.resource.data.kid == member(fid).kidId;
       }
       // Решения проверки, подарки и бонусы — пишут только родители.
       match /plog/{docId} {

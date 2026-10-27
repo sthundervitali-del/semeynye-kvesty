@@ -15,7 +15,7 @@ const MONTHS_G = ["января", "февраля", "марта", "апреля"
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.13.4", APP_DATE = "22.10.2026";
+const APP_VERSION = "2.14.0", APP_DATE = "27.10.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -36,7 +36,11 @@ const S = {
 const isParent = () => S.me?.role === "parent";
 /** Аватар: фото участника, если загружено, иначе первая буква. */
 const kidMember = k => k && S.members.find(m => m.role === "child" && m.kidId === k.id);
+// Картинки из базы (аватары, фото-отчёты) выводятся только если это настоящее изображение.
+const IMG_RE = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/, URL_RE = /^https:\/\/[A-Za-z0-9.-]+\.(googleusercontent|gstatic)\.com\/[^"'<>\s`]*$/;
+const safeImg = v => typeof v === "string" && (IMG_RE.test(v) || URL_RE.test(v)) ? v : "";
 function avatar(name, img, cls = "", style = "", attrs = "", tag = "span") {
+  img = safeImg(img);
   return `<${tag} class="avatar ${cls} ${img ? "has-img" : ""}" style="${img ? "" : style}" ${attrs}>${img ? `<img src="${img}" alt="">` : esc(((name || "?")[0] || "?").toUpperCase())}</${tag}>`;
 }
 const kidsList = () => S.cfg?.kids || [];
@@ -174,6 +178,7 @@ const fail = e => { console.error(e); toast(e?.code === "permission-denied" ? "�
 function recompute() {
   if (!S.cfg) return;
   S.data = F.merge(S.kidlogs, S.plogs, S.cfg);
+  backfillSnaps();
   // уведомления внутри приложения о новых событиях
   const now = new Map(S.data.entries.map(e => [e.id, e.status + "|" + e.at]));
   if (S.prevStatus) {
@@ -511,7 +516,7 @@ function parentReview() {
 async function loadPhotos() {
   for (const el of document.querySelectorAll("[data-photo]")) {
     const id = el.dataset.photo; if (S.photos[id]) continue;
-    try { const d = await S.be.getPhoto(id); S.photos[id] = d || ""; } catch (_) { S.photos[id] = ""; }
+    try { const d = await S.be.getPhoto(id); S.photos[id] = safeImg(d); } catch (_) { S.photos[id] = ""; }
     if (S.photos[id]) el.outerHTML = `<button class="ph" data-act="zoom" data-id="${id}" aria-label="${tr("Открыть фото")}"><img src="${S.photos[id]}" alt=""></button>`;
     else el.textContent = tr("фото удалено");
   }
@@ -892,7 +897,7 @@ function settingsPage(p) {
     return head("Участники и приглашения") + `<section class="card"><h2>${ic("users", "h")} Участники</h2><div>${members.map(m => `<div class="row-edit w">${avatar(m.name || m.email, m.avatar, "sm", m.role === "child" ? `background:${kidColor(kidById(m.kidId))}` : "")}<div class="t"><b>${esc(m.name || m.email || "Без имени")}${m.uid === S.user.uid ? " (вы)" : ""}</b><small>${m.role === "parent" ? "родитель" : "ребёнок: " + esc(kidById(m.kidId)?.name || "?")} · ${esc(m.email || "")}</small><small>${(m.tokens || []).length ? `${ic("bell", "xs")} уведомления включены` : "без уведомлений"}</small></div>
       ${m.uid !== S.user.uid ? `<button class="btn sm ghost icon danger" data-act="removeMember" data-id="${m.uid}" aria-label="Удалить ${esc(m.name || "")}">${ic("trash")}</button>` : "<span></span>"}</div>`).join("")}</div></section>
       <section class="card"><h2>${ic("plus", "h")} Пригласить</h2><div class="btnrow"><button class="btn go" data-act="inviteWho">${ic("plus")} Пригласить в семью</button></div>
-      <p class="hint">Код действует 7 дней. Ребёнку нужен свой Google-аккаунт (для детей до 13 лет — через Google Family Link).</p></section>`;
+      <p class="hint">Код одноразовый и действует 48 часов. Ребёнку нужен свой Google-аккаунт (для детей до 13 лет — через Google Family Link).</p></section>`;
   }
   if (p === "kids") return head("Дети") + `<section class="card"><form class="grid" data-form="kids">${kidsList().map(k => `
       <div class="full kid-head">${avatar(k.name, kidMember(k)?.avatar, "sm", `background:${kidColor(k)}`)}<b>${esc(k.name)}</b><button type="button" class="btn sm ghost" data-act="preview" data-id="${k.id}">Глазами ребёнка</button><button type="button" class="btn sm ghost icon danger" data-act="delKid" data-id="${k.id}" aria-label="Удалить ребёнка: ${esc(k.name)}">${ic("trash")}</button></div>
@@ -1026,8 +1031,17 @@ function redoForm(e) {
   m => { const ta = m.querySelector("#redo-note"); ta.focus();
     m.querySelector("#redo-ok").onclick = () => { decide(e, "redo", ta.value.trim()); closeModal(); }; });
 }
+/* Решения, принятые до появления снимков, один раз дополняются снимком (только родитель). */
+let snapsDone = false;
+function backfillSnaps() {
+  if (snapsDone || !S.loaded || !isParent() || S.preview || !S.be?.putSnaps) return;
+  const by = {};
+  for (const e of S.data.entries) if (e.dec?.status && !e.dec.snap && e.type !== "game") (by[e.doc] ||= {})[e.id] = { snap: F.snapshot(e) };
+  snapsDone = true;
+  for (const [docId, map] of Object.entries(by)) S.be.putSnaps(docId, map).catch(() => { snapsDone = false; });
+}
 function decide(e, status, note, instant) {
-  const dec = { status, note: note ?? "", decidedAt: Date.now(), instant: !!(instant && status === "ok") };
+  const dec = { status, note: note ?? "", decidedAt: Date.now(), instant: !!(instant && status === "ok"), snap: F.snapshot(e) };
   S.instant.delete(e.id);
   S.be.putDecision(e.doc, e.id, dec).then(() => toast(status === "ok" ? (e.type === "wish" ? "Награда выдана" : dec.instant ? `Принято: +${e.value}, сразу в банк` : `Принято: +${e.value}`) : status === "redo" ? "Отправлено на доработку" : e.type === "wish" ? "Отказано, баллы вернулись" : "Не засчитано")).catch(fail);
 }
@@ -1054,7 +1068,7 @@ function showInvite(role, kidId) {
       const link = location.origin + "/?join=" + code;
       const who = role === "parent" ? "второго родителя" : kidById(kidId)?.name;
       m.innerHTML = `<h2>Приглашение для: ${esc(who)}</h2><div class="code">${code}</div>
-        <p class="hint">Откройте ссылку на устройстве ${role === "parent" ? "второго родителя" : "ребёнка"} и войдите через Google. Или войдите и введите код вручную. Код действует 7 дней.</p>
+        <p class="hint">Откройте ссылку на устройстве ${role === "parent" ? "второго родителя" : "ребёнка"} и войдите через Google. Или войдите и введите код вручную. Код одноразовый и действует 48 часов.</p>
         <input id="inv-link" readonly value="${esc(link)}"><div class="btns"><button class="btn ghost" data-act="closeModal">Закрыть</button><button class="btn dark" id="inv-copy">Скопировать ссылку</button></div>`;
       I18N.apply(m);
       m.querySelector("#inv-copy").onclick = () => { const i = m.querySelector("#inv-link"); navigator.clipboard?.writeText(link).then(() => toast("Ссылка скопирована"), () => { i.select(); toast("Выделено — скопируйте"); }); };
@@ -1228,7 +1242,7 @@ document.addEventListener("click", e => {
     const t = S.cfg.tasks[id], kid = el.dataset.kid, s = S.selDay; if (!t) return;
     ask(`Засчитать «${t.title}» за ${humanDay(s)}?`, "Засчитать", async () => {
       const e2 = { id: uid(), kid, type: "task", ref: t.id, title: t.title, pts: t.pts, day: s, at: Date.now(), checks: [], photos: [], resent: false, manual: true };
-      try { await S.be.putEntry(kid, s.slice(0, 7), e2); await S.be.putDecision(kid + "_" + s.slice(0, 7), e2.id, { status: "ok", note: "", decidedAt: Date.now() }); toast(`Засчитано: +${t.pts * F.mult(S.cfg, s, t.id)}`); } catch (err) { fail(err); }
+      try { await S.be.putEntry(kid, s.slice(0, 7), e2); await S.be.putDecision(kid + "_" + s.slice(0, 7), e2.id, { status: "ok", note: "", decidedAt: Date.now(), snap: F.snapshot({ ...e2, value: t.pts * F.mult(S.cfg, s, t.id) }) }); toast(`Засчитано: +${t.pts * F.mult(S.cfg, s, t.id)}`); } catch (err) { fail(err); }
     }); return;
   }
   if (act === "selDay") { S.selDay = id; render(); return; }
