@@ -65,6 +65,22 @@ function processSupport() {
   });
 }
 
+/** Для администратора: список семей и участников в журнале. Выберите listFamilies и нажмите «Выполнить». */
+function listFamilies() {
+  var fams = fsList("families");
+  console.log("Семей: " + fams.length);
+  fams.forEach(function (f, i) {
+    var members = fsList("families/" + f.id + "/members");
+    var kids = f.kids || [], kidName = function (id) { var k = kids.filter(function (x) { return x.id === id; })[0]; return k ? k.name : "?"; };
+    var lines = members.map(function (m) {
+      return "   • " + (m.role === "parent" ? "родитель" : "ребёнок (" + kidName(m.kidId) + ")") + ": " + (m.name || "без имени") + " <" + (m.email || "нет почты") + ">";
+    });
+    var noAcc = kids.filter(function (k) { return !members.some(function (m) { return m.role === "child" && m.kidId === k.id; }); }).map(function (k) { return k.name; });
+    console.log((i + 1) + ". «" + (f.name || "без названия") + "» — создана " + (f.createdAt ? new Date(f.createdAt).toLocaleDateString("ru-RU") : "?") +
+      ", детей: " + kids.length + (noAcc.length ? " (без аккаунта: " + noAcc.join(", ") + ")" : "") + "\n" + (lines.join("\n") || "   (участников нет)"));
+  });
+}
+
 /** Проверка права на отправку писем: выберите checkMail и нажмите «Выполнить» (письмо не отправляется). */
 function checkMail() { console.log("Право на почту есть. Писем на сегодня осталось: " + MailApp.getRemainingDailyQuota() + ". Адрес поддержки: " + (prop("SUPPORT_EMAIL") ? "задан" : "НЕ задан")); }
 
