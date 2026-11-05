@@ -135,6 +135,8 @@ function fsPatch(path, data, mask) {
   return r.code === 200;
 }
 
+function fieldName(seg) { return /^[A-Za-z_][A-Za-z0-9_]*$/.test(seg) ? seg : "`" + String(seg).replace(/`/g, "") + "`"; }
+
 /* ---------- Push (Firebase Cloud Messaging) ---------- */
 function push(member, fid, title, body) {
   var tokens = (member && member.tokens) || [];
@@ -237,7 +239,7 @@ function processFamily(fam) {
   }
 
   // 3. Уведомления родителям о новых заявках.
-  var pending = data.entries.filter(function (e) { return e.status === "pending" && e.type !== "game"; });
+  var pending = data.entries.filter(function (e) { return e.status === "pending" && (e.type === "task" || e.type === "wish"); });
   var fresh = pending.filter(function (e) { return now - e.at < 3 * 3600e3 && once("p_" + e.id + "_" + e.at); });
   if (fresh.length) {
     parents.forEach(function (m) {
@@ -257,6 +259,35 @@ function processFamily(fam) {
   data.entries.forEach(function (e) {
     if (e.type !== "wish" || e.status !== "ok" || !e.dec || now - (e.dec.decidedAt || 0) > 3 * 3600e3 || !once("w_" + e.id)) return;
     kidMembers(e.kid).forEach(function (m) { var en = isEn(m); push(m, fid, (en ? "🎉 Your wish is coming true: " : "🎉 Желание исполняется: ") + titleFor(m, e.title, (cfg.wishes || {})[e.ref]), e.dec.note || (en ? "Your parents approved your request. Open the app!" : "Родители одобрили твою заявку. Открой приложение!")); });
+  });
+
+  // 5. Банк депозитов: открывает депозиты и закрывает досрочно. Баланс считается по всей истории ребёнка.
+  if (data.entries.some(function (e) { return (e.type === "dep" || e.type === "depclose") && e.status === "pending"; })) {
+    var full = FQ.merge(fsList("families/" + fid + "/kidlog"), fsList("families/" + fid + "/plog"), cfg);
+    var acts = FQ.bankActions(full, cfg, now), byDoc = {};
+    acts.forEach(function (x) { (byDoc[x.doc] = byDoc[x.doc] || []).push(x); });
+    Object.keys(byDoc).forEach(function (doc) {
+      var d = {}, mask = [];
+      byDoc[doc].forEach(function (x) { d[x.id] = d[x.id] || {}; for (var k in x.patch) { d[x.id][k] = x.patch[k]; mask.push("d." + fieldName(x.id) + "." + k); } });
+      if (!fsPatch("families/" + fid + "/plog/" + doc, { d: d }, mask)) return;
+      byDoc[doc].forEach(function (x) {
+        var e = full.entries.filter(function (y) { return y.id === x.id; })[0]; if (!e) return;
+        if (e.type === "dep" && x.patch.status) kidMembers(e.kid).forEach(function (m) {
+          var en = isEn(m), sn = x.patch.snap;
+          if (x.patch.status === "ok") push(m, fid, en ? "🐷 Deposit opened" : "🐷 Депозит открыт",
+            (en ? e.value + " points will come back on " : e.value + " баллов вернутся ") + new Date(sn.matureAt).toLocaleDateString(en ? "en-GB" : "ru-RU") + (en ? " with +" : " с прибавкой +") + FQ.interestOf(e.value, sn.pct));
+          else push(m, fid, en ? "Deposit not opened" : "Депозит не открыт", x.patch.note || "");
+        });
+        if (e.type === "dep" && x.patch.closedAt) kidMembers(e.kid).forEach(function (m) { var en = isEn(m);
+          push(m, fid, en ? "🐷 Deposit closed early" : "🐷 Депозит закрыт досрочно", (en ? "Returned: " : "Вернулось: ") + e.value); });
+      });
+    });
+  }
+  // 5а. Созревшие депозиты (за последние 3 часа).
+  data.entries.forEach(function (e) {
+    if (e.type !== "dep" || FQ.depState(e, now) !== "matured" || now - e.dep.matureAt > 3 * 3600e3 || !once("dm_" + e.id)) return;
+    kidMembers(e.kid).forEach(function (m) { var en = isEn(m);
+      push(m, fid, en ? "🐷 Your deposit has grown!" : "🐷 Депозит вырос!", (en ? "Returned " : "Вернулось ") + (e.value + e.dep.interest) + (en ? ": " + e.value + " + " + e.dep.interest + " bonus" : ": " + e.value + " и " + e.dep.interest + " прибавка")); });
   });
 
   // Удаление старых фото-отчётов раз в сутки (срок — в настройках семьи, по умолчанию 14 дней).
