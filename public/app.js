@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.15.1", APP_DATE = "05.11.2026";
+const APP_VERSION = "2.15.2", APP_DATE = "09.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -957,14 +957,15 @@ function parentRewards() {
     if (wsel) { const on = wsel.has(w.id); return `<div class="row-edit trow pick ${on ? "on" : ""}" data-act="selTask" data-id="${w.id}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="pbox">${ic("check")}</span>${icon}${text}</div>`; }
     return `<div class="srow" data-id="${w.id}"><button class="swipe-del" data-act="swipeDel" data-kind="wishes" data-id="${w.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow w">${wishes.length > 1 ? `<button class="grip" data-drag aria-label="Перетащить: ${esc(w.title)}">${ic("grip")}</button>` : "<span></span>"}${icon}${text}<button class="btn sm ghost icon" data-act="wishForm" data-id="${w.id}" aria-label="Изменить: ${esc(w.title)}">${ic("pencil")}</button></div></div>`;
   };
-  if (wsel) out = `<section class="card"><div class="card-head"><h2>${ic("check-square", "h")} Выбор наград</h2><span class="hint">выбрано ${wsel.size}</span></div>
-      <p class="hint">Нажимайте на награды, которые нужно удалить. Кнопка «Все» выбирает весь магазин.</p></section>`;
-  if (!wsel) out += `<section class="card"><div class="card-head"><h2>${ic("gift", "h")} Магазин желаний</h2><span class="hint">${wishes.length ? `наград: ${wishes.length}` : "список пуст"}</span></div>
-    <p class="hint">Дети обменивают накопленные баллы на награды.${wishes.length ? ` Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке награды увидят дети. Удалить награду — смахните её влево.` : " Выберите готовые награды из шаблонов или создайте свои."}</p>
-    <div class="btnrow"><button class="btn ${wishes.length ? "" : "go"}" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}${wishes.length > 1 ? `<button class="btn ghost" data-act="sortWishes">${ic("coins")} По цене</button>` : ""}</div></section>`;
-  if (!wishes.length) return out + (wsel ? "" : depositsCard());
-  out += `<section class="card"><div class="card-head"><h2>Награды</h2>${wsel ? `<button class="btn sm ghost" data-act="selAllW">${wishes.every(w => wsel.has(w.id)) ? "Снять" : "Все"}</button>` : ""}</div>
-    <div class="sortable" data-kind="wishes">${wishes.map(wrow).join("")}</div></section>`;
+  // Один блок, как «Депозиты»: заголовок, описание, список, кнопки.
+  const head = wsel
+    ? `<div class="card-head"><h2>${ic("check-square", "h")} Выбор наград</h2><span class="hint">выбрано ${wsel.size}</span><button class="btn sm ghost" data-act="selAllW">${wishes.every(w => wsel.has(w.id)) ? "Снять" : "Все"}</button></div>`
+    : `<div class="card-head"><h2>${ic("gift", "h")} Магазин желаний</h2><span class="hint">${wishes.length ? `наград: ${wishes.length}` : "список пуст"}</span></div>`;
+  const hint = wsel ? "Нажимайте на награды, которые нужно удалить. Кнопка «Все» выбирает весь магазин."
+    : `Дети обменивают накопленные баллы на награды.${wishes.length ? ` Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке награды увидят дети. Удалить награду — смахните её влево.` : " Выберите готовые награды из шаблонов или создайте свои."}`;
+  out = (wsel ? "" : out) + `<section class="card">${head}<p class="hint">${hint}</p>
+    ${wishes.length ? `<div class="sortable" data-kind="wishes">${wishes.map(wrow).join("")}</div>` : ""}
+    ${wsel ? "" : `<div class="btnrow"><button class="btn ${wishes.length ? "" : "go"}" data-act="tplWishes">${ic("layers")} Из шаблонов</button><button class="btn" data-act="wishForm">${ic("plus")} Своя награда</button>${wishes.length ? `<button class="btn ghost" data-act="selMode" data-id="wishes">${ic("check-square")} Выбрать</button>` : ""}${wishes.length > 1 ? `<button class="btn ghost" data-act="sortWishes">${ic("coins")} По цене</button>` : ""}</div>`}</section>`;
   if (wsel) out += selBar(wsel); else out += depositsCard();
   return out;
 }
