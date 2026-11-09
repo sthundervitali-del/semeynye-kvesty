@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.15.3", APP_DATE = "09.11.2026";
+const APP_VERSION = "2.15.4", APP_DATE = "09.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -796,7 +796,7 @@ document.addEventListener("pointerdown", e => {
     const ids = [...list.children].map(r => r.dataset.id);
     S.drag = false;
     if (ids.join() !== before.join()) {
-      const coll = list.dataset.kind === "wishes" ? "wishes" : "tasks";
+      const coll = ["wishes", "deposits"].includes(list.dataset.kind) ? list.dataset.kind : "tasks";
       let os = ids.map(id => S.cfg[coll][id]?.o || 0).sort((a, b) => a - b);
       if (new Set(os).size !== os.length) os = ids.map((_, i) => (os[0] || Date.now()) + i);
       const map = {};
@@ -999,16 +999,16 @@ function depositsCard(dsel) {
     const text = `<div class="t"><b>${esc(p.title)}</b><small class="num">${p.days} ${plural(p.days, "день", "дня", "дней")} · +${+p.pct || 0}% · от ${Math.max(1, +p.min || 1)}${p.active === false ? " · выключен" : ""}${use.length ? ` · открыт: ${use.length}` : ""}</small></div>`;
     if (dsel) { if (use.length) return `<div class="row-edit trow pick off" aria-disabled="true"><span class="pbox"></span>${icon}${text}</div>`;
       const on = dsel.has(p.id); return `<div class="row-edit trow pick ${on ? "on" : ""}" data-act="selTask" data-id="${p.id}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="pbox">${ic("check")}</span>${icon}${text}</div>`; }
-    return `<div class="srow" data-id="${p.id}"><button class="swipe-del" data-act="swipeDel" data-kind="deposits" data-id="${p.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow w"><span></span>${icon}${text}<button class="btn sm ghost icon" data-act="depForm" data-id="${p.id}" aria-label="Изменить: ${esc(p.title)}">${ic("pencil")}</button></div></div>`;
+    return `<div class="srow" data-id="${p.id}"><button class="swipe-del" data-act="swipeDel" data-kind="deposits" data-id="${p.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow w">${plans.length > 1 ? `<button class="grip" data-drag aria-label="Перетащить: ${esc(p.title)}">${ic("grip")}</button>` : "<span></span>"}${icon}${text}<button class="btn sm ghost icon" data-act="depForm" data-id="${p.id}" aria-label="Изменить: ${esc(p.title)}">${ic("pencil")}</button></div></div>`;
   };
   const free = plans.filter(p => !depInUse(p.id).length);
   const head = dsel
     ? `<div class="card-head"><h2>${ic("check-square", "h")} Выбор депозитов</h2><span class="hint">выбрано ${dsel.size}</span>${free.length ? `<button class="btn sm ghost" data-act="selAllD">${free.every(p => dsel.has(p.id)) ? "Снять" : "Все"}</button>` : ""}</div>`
     : `<div class="card-head"><h2>${ic("piggy", "h")} Депозиты</h2><span class="hint">${plans.length ? `вариантов: ${plans.length}` : "не настроены"}</span></div>`;
   const hint = dsel ? `Нажимайте на депозиты, которые нужно удалить.${plans.length > free.length ? " Депозиты, которые сейчас открыты у детей, удалить нельзя — их можно только выключить." : ""}`
-    : `Учат копить: ребёнок кладёт накопленные баллы на срок и получает прибавку. Пока баллы на депозите, тратить их нельзя. Если забрать досрочно — вернутся без прибавки.${plans.length ? " Удалить депозит — смахните его влево." : ""}`;
+    : `Учат копить: ребёнок кладёт накопленные баллы на срок и получает прибавку. Пока баллы на депозите, тратить их нельзя. Если забрать досрочно — вернутся без прибавки.${plans.length > 1 ? ` Порядок меняется перетаскиванием за ${ic("grip", "xs")} — в таком же порядке депозиты увидят дети. Удалить депозит — смахните его влево.` : plans.length ? " Удалить депозит — смахните его влево." : ""}`;
   return `<section class="card">${head}<p class="hint">${hint}</p>
-    ${plans.length ? `<div>${plans.map(prow).join("")}</div>` : ""}
+    ${plans.length ? `<div class="sortable" data-kind="deposits">${plans.map(prow).join("")}</div>` : ""}
     ${dsel ? "" : `<div class="btnrow"><button class="btn ${plans.length ? "" : "go"}" data-act="tplDeps">${ic("layers")} Из шаблонов</button><button class="btn" data-act="depForm">${ic("plus")} Свой депозит</button>${plans.length ? `<button class="btn ghost" data-act="selMode" data-id="deposits">${ic("check-square")} Выбрать</button>` : ""}</div>`}
     ${!dsel && onDep.length ? `<p class="hint num">Сейчас на депозитах: ${onDep.map(([k, a]) => `${esc(k.name)} — ${a.deposited + a.depPending}`).join(", ")}.</p>` : ""}</section>`;
 }
