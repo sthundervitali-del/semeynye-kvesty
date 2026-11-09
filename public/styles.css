@@ -523,3 +523,4 @@ label.btn{cursor:pointer}
 .lg-sub>div{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0}
 .lg-sub small{color:var(--muted)}
 .lg-sub b{color:var(--ok);font-weight:700}
+.trow.pick.off{opacity:.45;cursor:not-allowed}

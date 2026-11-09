@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.15.2", APP_DATE = "09.11.2026";
+const APP_VERSION = "2.15.3", APP_DATE = "09.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -941,6 +941,7 @@ function wishTemplates() {
 }
 function parentRewards() {
   const kids = kidsList();
+  if (S.selKind === "deposits" && S.sel) { for (const id of [...S.sel]) if (!S.cfg.deposits?.[id] || S.cfg.deposits[id].del || depInUse(id).length) S.sel.delete(id); return depositsCard(S.sel) + selBar(S.sel); }
   const giftCard = !kids.length || (S.sel && S.selKind === "wishes") ? "" : `<section class="card"><h2>${ic("coins", "h")} Подарить баллы</h2><p class="hint">Ребёнок увидит радостное сообщение с вашими словами. Баллы сразу можно тратить.</p>
     <form class="grid" data-form="gift"><label>Кому<select id="g-kid" name="kid">${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("")}</select></label>
     <label>Сколько баллов<input id="g-pts" name="pts" type="number" inputmode="numeric" min="1" value="20" required></label>
@@ -969,14 +970,47 @@ function parentRewards() {
   if (wsel) out += selBar(wsel); else out += depositsCard();
   return out;
 }
-function depositsCard() {
-  const plans = F.live(S.cfg.deposits), now = Date.now();
+/* Кто сейчас пользуется вариантом депозита: открытые и ожидающие открытия вклады. */
+function depInUse(planId) {
+  const now = Date.now();
+  return (S.data?.entries || []).filter(e => e.type === "dep" && e.ref === planId && ["pending", "active"].includes(F.depState(e, now)));
+}
+function depUseText(list) {
+  return list.map(e => `${esc(kidById(e.kid)?.name || "")} — ${e.value}${e.dep?.matureAt ? `, вернётся ${dShort(e.dep.matureAt)}` : ", открывается"}`).join("; ");
+}
+/* Удаление варианта депозита: только если им сейчас никто не пользуется. */
+function delDeposit(id, done) {
+  const d = S.cfg.deposits?.[id]; if (!d) return;
+  const use = depInUse(id);
+  if (use.length) {
+    modal(`<h2>Удалить нельзя</h2><p>Депозит «${esc(d.title)}» сейчас открыт: ${depUseText(use)}.</p>
+      <p class="hint">Удалить его можно, когда все вклады вернутся.${d.active === false ? "" : " Чтобы дети не открывали новые, выключите его — уже открытые доработают до конца."}</p>
+      <div class="btns">${d.active === false ? "" : `<button class="btn" id="du-off">Выключить для новых</button>`}<button class="btn dark" data-act="closeModal">Понятно</button></div>`,
+      m => { const off = m.querySelector("#du-off"); if (off) off.onclick = () => { closeModal(); S.be.setFamily({ deposits: { [id]: { active: false } } }).then(() => toast("Депозит выключен для новых вкладов")).catch(fail); }; });
+    return;
+  }
+  ask(`Удалить депозит «${d.title}»?`, "Удалить", () => { swOpen = null; S.be.setFamily({ deposits: { [id]: { del: true } } }).then(() => { toast("Депозит удалён"); done?.(); }).catch(fail); }, true);
+}
+function depositsCard(dsel) {
+  const plans = F.live(S.cfg.deposits);
   const onDep = kidsList().map(k => [k, acct(k.id)]).filter(([, a]) => a.deposited + a.depPending);
-  return `<section class="card"><div class="card-head"><h2>${ic("piggy", "h")} Депозиты</h2><span class="hint">${plans.length ? `вариантов: ${plans.length}` : "не настроены"}</span></div>
-    <p class="hint">Учат копить: ребёнок кладёт накопленные баллы на срок и получает прибавку. Пока баллы на депозите, тратить их нельзя. Если забрать досрочно — вернутся без прибавки.</p>
-    ${plans.length ? `<div>${plans.map(p => `<div class="row-edit trow w"><span></span><span class="ic cat-gold">${ic("piggy")}</span><div class="t"><b>${esc(p.title)}</b><small class="num">${p.days} ${plural(p.days, "день", "дня", "дней")} · +${+p.pct || 0}% · от ${Math.max(1, +p.min || 1)}${p.active === false ? " · выключен" : ""}</small></div><button class="btn sm ghost icon" data-act="depForm" data-id="${p.id}" aria-label="Изменить: ${esc(p.title)}">${ic("pencil")}</button></div>`).join("")}</div>` : ""}
-    <div class="btnrow"><button class="btn ${plans.length ? "" : "go"}" data-act="tplDeps">${ic("layers")} Из шаблонов</button><button class="btn" data-act="depForm">${ic("plus")} Свой депозит</button></div>
-    ${onDep.length ? `<p class="hint num">Сейчас на депозитах: ${onDep.map(([k, a]) => `${esc(k.name)} — ${a.deposited + a.depPending}`).join(", ")}.</p>` : ""}</section>`;
+  const prow = p => {
+    const use = depInUse(p.id), icon = `<span class="ic cat-gold">${ic("piggy")}</span>`;
+    const text = `<div class="t"><b>${esc(p.title)}</b><small class="num">${p.days} ${plural(p.days, "день", "дня", "дней")} · +${+p.pct || 0}% · от ${Math.max(1, +p.min || 1)}${p.active === false ? " · выключен" : ""}${use.length ? ` · открыт: ${use.length}` : ""}</small></div>`;
+    if (dsel) { if (use.length) return `<div class="row-edit trow pick off" aria-disabled="true"><span class="pbox"></span>${icon}${text}</div>`;
+      const on = dsel.has(p.id); return `<div class="row-edit trow pick ${on ? "on" : ""}" data-act="selTask" data-id="${p.id}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="pbox">${ic("check")}</span>${icon}${text}</div>`; }
+    return `<div class="srow" data-id="${p.id}"><button class="swipe-del" data-act="swipeDel" data-kind="deposits" data-id="${p.id}" tabindex="-1">${ic("trash")}<span>Удалить</span></button><div class="row-edit trow w"><span></span>${icon}${text}<button class="btn sm ghost icon" data-act="depForm" data-id="${p.id}" aria-label="Изменить: ${esc(p.title)}">${ic("pencil")}</button></div></div>`;
+  };
+  const free = plans.filter(p => !depInUse(p.id).length);
+  const head = dsel
+    ? `<div class="card-head"><h2>${ic("check-square", "h")} Выбор депозитов</h2><span class="hint">выбрано ${dsel.size}</span>${free.length ? `<button class="btn sm ghost" data-act="selAllD">${free.every(p => dsel.has(p.id)) ? "Снять" : "Все"}</button>` : ""}</div>`
+    : `<div class="card-head"><h2>${ic("piggy", "h")} Депозиты</h2><span class="hint">${plans.length ? `вариантов: ${plans.length}` : "не настроены"}</span></div>`;
+  const hint = dsel ? `Нажимайте на депозиты, которые нужно удалить.${plans.length > free.length ? " Депозиты, которые сейчас открыты у детей, удалить нельзя — их можно только выключить." : ""}`
+    : `Учат копить: ребёнок кладёт накопленные баллы на срок и получает прибавку. Пока баллы на депозите, тратить их нельзя. Если забрать досрочно — вернутся без прибавки.${plans.length ? " Удалить депозит — смахните его влево." : ""}`;
+  return `<section class="card">${head}<p class="hint">${hint}</p>
+    ${plans.length ? `<div>${plans.map(prow).join("")}</div>` : ""}
+    ${dsel ? "" : `<div class="btnrow"><button class="btn ${plans.length ? "" : "go"}" data-act="tplDeps">${ic("layers")} Из шаблонов</button><button class="btn" data-act="depForm">${ic("plus")} Свой депозит</button>${plans.length ? `<button class="btn ghost" data-act="selMode" data-id="deposits">${ic("check-square")} Выбрать</button>` : ""}</div>`}
+    ${!dsel && onDep.length ? `<p class="hint num">Сейчас на депозитах: ${onDep.map(([k, a]) => `${esc(k.name)} — ${a.deposited + a.depPending}`).join(", ")}.</p>` : ""}</section>`;
 }
 function depTemplates() {
   const used = new Set(F.live(S.cfg.deposits).map(d => d.tpl).filter(Boolean));
@@ -1003,7 +1037,7 @@ function depForm(id) {
     const save = () => { if (!f.reportValidity()) return; const did = id || uid("p");
       S.be.setFamily({ deposits: { [did]: { id: did, o: d.o ?? Date.now(), tpl: d.tpl || null, del: false, title: f.title.value.trim(), days: Math.min(365, Math.max(1, parseInt(f.days.value) || 1)), pct: Math.min(300, Math.max(0, Math.round(+f.pct.value || 0))), min: Math.max(1, parseInt(f.min.value) || 1), active: f.active.checked } } }).then(() => toast("Депозит сохранён")).catch(fail); closeModal(); };
     m.querySelector("#df-save").onclick = save; f.onsubmit = e => { e.preventDefault(); save(); };
-    const del = m.querySelector("#df-del"); if (del) del.onclick = () => ask(`Удалить депозит «${d.title}»? Уже открытые депозиты детей доработают до конца.`, "Удалить", () => S.be.setFamily({ deposits: { [id]: { ...d, del: true } } }).catch(fail), true);
+    const del = m.querySelector("#df-del"); if (del) del.onclick = () => { closeModal(); delDeposit(id); };
   });
 }
 function photoLabel(d) { return { 7: "1 неделя", 14: "2 недели", 30: "1 месяц", 90: "3 месяца" }[d] || `${d} ${plural(d, "день", "дня", "дней")}`; }
@@ -1332,6 +1366,7 @@ document.addEventListener("click", e => {
   if (act === "supDel") { const r = (S.support || []).find(x => x.id === id); if (!r) return; const admin = !!el.dataset.admin;
     ask(`Удалить запрос «${r.subject}»?` + (admin && r.uid !== S.user.uid ? " У пользователя он останется." : ""), "Удалить", () => { swOpen = null;
       S.be.supportDelete(r, admin, S.user.uid).then(() => { toast("Запрос удалён"); if (S.setPage && S.setPage.endsWith(r.id)) { S.setPage = admin ? "admin-support" : "support"; render(); } }).catch(fail); }, true); return; }
+  if (act === "swipeDel" && el.dataset.kind === "deposits") { delDeposit(id); return; }
   if (act === "swipeDel") { const kind = el.dataset.kind === "wishes" ? "wishes" : "tasks", t = S.cfg[kind]?.[id]; if (!t) return;
     ask(`Удалить «${t.title}»?`, "Удалить", () => { swOpen = null; S.be.setFamily({ [kind]: { [id]: { del: true } } }).then(() => toast(kind === "wishes" ? "Награда удалена" : "Дело удалено")).catch(fail); }, true); return; }
   if (act === "delKid") { const k = kidById(id); if (!k) return;
@@ -1359,8 +1394,12 @@ document.addEventListener("click", e => {
       S.be.setFamily({ wishes: map }).then(() => toast("Награды отсортированы по цене")).catch(fail);
     }); return; }
   if (act === "selAllW") { if (!S.sel) return; const list = F.live(S.cfg.wishes); const all = list.every(w => S.sel.has(w.id)); list.forEach(w => all ? S.sel.delete(w.id) : S.sel.add(w.id)); render(); return; }
+  if (act === "selAllD") { if (!S.sel) return; const list = F.live(S.cfg.deposits).filter(p => !depInUse(p.id).length); const all = list.every(p => S.sel.has(p.id)); list.forEach(p => all ? S.sel.delete(p.id) : S.sel.add(p.id)); render(); return; }
   if (act === "selAll") { if (!S.sel) return; const list = F.live(S.cfg.tasks).filter(t => F.category(t) === el.dataset.cat); const all = list.every(t => S.sel.has(t.id)); list.forEach(t => all ? S.sel.delete(t.id) : S.sel.add(t.id)); render(); return; }
   if (act === "selDel") { const ids = [...(S.sel || [])]; if (!ids.length) return;
+    if (S.selKind === "deposits") { const ok = ids.filter(i => !depInUse(i).length);
+      ask(`Удалить выбранные депозиты (${ok.length})?`, "Удалить", () => { const map = {}; ok.forEach(i => { map[i] = { del: true }; }); S.sel = null; S.selKind = null;
+        S.be.setFamily({ deposits: map }).then(() => toast(`Удалено депозитов: ${ok.length}`)).catch(fail); }, true); return; }
     const kind = S.selKind === "wishes" ? "wishes" : "tasks", what = kind === "wishes" ? "награды" : "дела";
     ask(`Удалить выбранные ${what} (${ids.length})?`, "Удалить", () => { const map = {}; ids.forEach(i => { map[i] = { del: true }; }); S.sel = null; S.selKind = null;
       S.be.setFamily({ [kind]: map }).then(() => toast(kind === "wishes" ? `Удалено наград: ${ids.length}` : `Удалено дел: ${ids.length}`)).catch(fail); }, true); return; }
