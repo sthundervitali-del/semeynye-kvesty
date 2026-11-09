@@ -224,7 +224,7 @@
     "Копится за неделю": "Saving up this week",
     "можно потратить": "available to spend",
     "копится за неделю": "saving up this week",
-    "на депозитах": "on deposit",
+    "на депозитах": "on deposit", "открыт": "open", "выключен": "off",
     "заработано на депозитах": "earned on deposits",
     "Подарок от родителей": "Gift from parents",
     "Бонус от родителей": "Bonus from parents",
@@ -246,6 +246,9 @@
     "Нажимайте на депозиты, которые нужно удалить.": "Tap the deposits you want to delete.",
     "Депозиты, которые сейчас открыты у детей, удалить нельзя — их можно только выключить.": "Deposits currently open for children can't be deleted, only turned off.",
     "Удалить депозит — смахните его влево.": "To delete a deposit, swipe it left.",
+    "Дети обменивают накопленные баллы на награды. Порядок меняется перетаскиванием за": "Children exchange saved points for rewards. Drag",
+    "Дети обменивают накопленные баллы на награды. Выберите готовые награды из шаблонов или создайте свои.": "Children exchange saved points for rewards. Pick ready-made rewards from templates or create your own.",
+    "Учат копить: ребёнок кладёт накопленные баллы на срок и получает прибавку. Пока баллы на депозите, тратить их нельзя. Если забрать досрочно — вернутся без прибавки. Удалить депозит — смахните его влево.": "They teach saving: a child puts points away for a set term and gets a bonus. Points on deposit can't be spent. If withdrawn early, they come back without the bonus. To delete a deposit, swipe it left.",
     "Код не найден. Проверьте, что он введён без ошибок.": "Code not found. Check that it was typed correctly.", "Этот код уже использован. Попросите новый.": "This code has already been used. Ask for a new one.", "Срок действия кода истёк. Попросите новый.": "The code has expired. Ask for a new one.",
     "Код одноразовый и действует 48 часов. Ребёнку нужен свой Google-аккаунт (для детей до 13 лет — через Google Family Link).": "The code works once and is valid for 48 hours. A child needs their own Google account (under 13: via Google Family Link).",
     "Скопировать ссылку": "Copy link", "Ссылка скопирована": "Link copied", "Выделено — скопируйте": "Selected, copy it", "второго родителя": "a second parent",
@@ -391,7 +394,7 @@
     [/^Сегодня выходной: (.+)$/, function (x) { return "Day off today: " + t(x); }],
     [/^Не удалось войти: (.+)$/, function (x) { return "Couldn't sign in: " + x; }],
     [/^(\d+) (день|дня|дней) · от (\d+)$/, function (d, _, m) { return pl(d, "day", "days") + " · from " + m; }],
-    [/^(\d+) (день|дня|дней) · \+(\d+)% · от (\d+)( · выключен)?$/, function (d, _, p, m, off) { return pl(d, "day", "days") + " · +" + p + "% · from " + m + (off ? " · off" : ""); }],
+    [/^(\d+) (день|дня|дней) · \+(\d+)% · от (\d+)( · выключен)?(?: · открыт: (\d+))?$/, function (d, _, p, m, off, n) { return pl(d, "day", "days") + " · +" + p + "% · from " + m + (off ? " · off" : "") + (n ? " · open: " + n : ""); }],
     [/^(\d+) (день|дня|дней) · прибавка \+(\d+)% · от (\d+) до (\d+)$/, function (d, _, p, a, b) { return pl(d, "day", "days") + " · bonus +" + p + "% · from " + a + " to " + b; }],
     [/^(\d+) (день|дня|дней) · от (\d+) · 100 → (\d+)$/, function (d, _, m, x) { return pl(d, "day", "days") + " · from " + m + " · 100 → " + x; }],
     [/^Депозит «(.+)»$/, function (x) { return "Deposit “" + t(x) + "”"; }],
@@ -433,7 +436,7 @@
     "Пн": "Mo", "Вт": "Tu", "Ср": "We", "Чт": "Th", "Пт": "Fr", "Сб": "Sa", "Вс": "Su",
     "Дом": "Home", "Учёба": "Study", "Полезное": "Good habits", "Дочка": "Daughter", "Сын": "Son", "сегодня": "today", "копится": "this week",
     "в": "at", "уровень": "level", "из 3": "of 3", "дел": "tasks",
-    "открылись": "unlocked", "откроется": "unlocks", "показать": "show", "за": "for", "сразу в банк": "straight to the bank", "дело": "task", "дела": "tasks", "на депозитах": "on deposit",
+    "открылись": "unlocked", "откроется": "unlocks", "показать": "show", "за": "for", "сразу в банк": "straight to the bank", "дело": "task", "дела": "tasks", "на депозитах": "on deposit", "открыт": "open", "выключен": "off",
   };
 
   window.FQ_EN = EN;
