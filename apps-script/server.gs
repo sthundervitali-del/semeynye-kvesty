@@ -247,9 +247,11 @@ function processFamily(fam) {
       var sun = FQ.isoDow(todayS) === 7;
       kidMembers(k.id).forEach(function (m) {
         var en = isEn(m);
-        var body = acc.today ? (en ? "Credited today: +" + acc.today + "." : "Сегодня зачислено +" + acc.today + ".") : (en ? "No points today, you'll get them tomorrow!" : "Сегодня баллов нет — завтра получится!");
-        if (sun) body += en ? " This week's points are unlocked: you can spend " + acc.available + "." : " Баллы за неделю открыты: можно тратить " + acc.available + ".";
-        push(m, fid, sun ? (en ? "🎉 This week's points are available!" : "🎉 Баллы за неделю доступны!") : (en ? "⭐ Today's results" : "⭐ Итоги дня"), body);
+        var wk = FQ.weekly(cfg), opened = wk && sun;
+        var body = acc.today ? (en ? (wk ? "Credited today: +" : "Earned today: +") + acc.today + "." : (wk ? "Сегодня зачислено +" : "Сегодня заработано +") + acc.today + ".") : (en ? "No points today, you'll get them tomorrow!" : "Сегодня баллов нет — завтра получится!");
+        if (opened) body += en ? " This week's points are unlocked: you can spend " + acc.available + "." : " Баллы за неделю открыты: можно тратить " + acc.available + ".";
+        else if (!wk && acc.today) body += en ? " You can spend " + acc.available + "." : " Можно потратить " + acc.available + ".";
+        push(m, fid, opened ? (en ? "🎉 This week's points are available!" : "🎉 Баллы за неделю доступны!") : (en ? "⭐ Today's results" : "⭐ Итоги дня"), body);
       });
     });
   }

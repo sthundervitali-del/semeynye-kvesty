@@ -178,9 +178,13 @@ var FQ = (function () {
   }
 
   function creditTime(cfg) { return (cfg && cfg.settings && cfg.settings.creditTime) || "21:00"; }
+  // Режим зачисления: "instant" (по умолчанию) — баллы доступны сразу после проверки;
+  // "weekly" — копятся всю неделю и открываются в воскресенье в creditTime.
+  function weekly(cfg) { return !!(cfg && cfg.settings && cfg.settings.payout === "weekly"); }
   // dec.instant — родитель отметил «сразу в банк»: баллы доступны с момента решения.
-  function creditAt(e, cfg) { if (e.dec && e.dec.instant) return e.dec.decidedAt || 0; return Math.max(atTime(e.day, creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
-  function activeAt(e, cfg) { if (e.dec && e.dec.instant) return e.dec.decidedAt || 0; return Math.max(atTime(weekEnd(e.day), creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
+  function isInstant(e, cfg) { return !weekly(cfg) || !!(e.dec && e.dec.instant); }
+  function creditAt(e, cfg) { if (isInstant(e, cfg)) return (e.dec && e.dec.decidedAt) || 0; return Math.max(atTime(e.day, creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
+  function activeAt(e, cfg) { if (isInstant(e, cfg)) return (e.dec && e.dec.decidedAt) || 0; return Math.max(atTime(weekEnd(e.day), creditTime(cfg)), (e.dec && e.dec.decidedAt) || 0); }
 
   /* ---------- депозиты ----------
      Ребёнок кладёт баллы на срок (запись dep в kidlog). «Банк» — сервер или приложение родителя —
@@ -242,7 +246,7 @@ var FQ = (function () {
     data.entries.forEach(function (e) {
       if (e.kid !== kid) return;
       if (e.type === "task" && e.status === "ok") {
-        var t = activeAt(e, cfg), it = { at: t, kind: "task", title: e.title, amount: e.value, day: e.day, instant: !!(e.dec && e.dec.instant), id: e.id };
+        var t = activeAt(e, cfg), it = { at: t, kind: "task", title: e.title, amount: e.value, day: e.day, instant: isInstant(e, cfg), id: e.id };
         if (t <= now) ev.push(it); else upcoming.push(it);
       } else if (e.type === "wish" && e.status !== "no") ev.push({ at: e.at, kind: "wish", title: e.title, amount: -e.value, pending: e.status === "pending", id: e.id });
       else if (e.type === "dep" && e.status !== "no") {
@@ -344,7 +348,7 @@ var FQ = (function () {
     pad: pad, dayKey: dayKey, monthKey: monthKey, parseDay: parseDay, addDays: addDays, isoDow: isoDow,
     weekStart: weekStart, weekEnd: weekEnd, atTime: atTime, orthodoxEaster: orthodoxEaster, radunitsa: radunitsa,
     dayInfo: dayInfo, category: category, CATEGORY_NAMES: CATEGORY_NAMES, forKid: forKid, live: live, applies: applies,
-    mult: mult, deadline: deadline, merge: merge, creditAt: creditAt, activeAt: activeAt, creditTime: creditTime, account: account,
+    mult: mult, deadline: deadline, merge: merge, creditAt: creditAt, activeAt: activeAt, creditTime: creditTime, weekly: weekly, isInstant: isInstant, account: account,
     taskState: taskState, daySummary: daySummary
   };
 })();

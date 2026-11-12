@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.15.4", APP_DATE = "09.11.2026";
+const APP_VERSION = "2.16.0", APP_DATE = "12.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -339,7 +339,7 @@ function hero(k) {
     <div class="xp"><div class="bar"><i style="width:${Math.round(L.cur / 1.5)}%"></i></div><div class="row num"><span>До уровня ${L.lv + 1}: ещё ${150 - L.cur}</span><span class="streak">${ic("flame", "xs")} ${st} ${plural(st, "день", "дня", "дней")} подряд</span></div></div>
     <div class="stats num">
       <span class="stat"><b>+${a.today}</b>сегодня${a.tonight ? `, зачислится в ${F.creditTime(S.cfg)}` : ""}</span>
-      <span class="stat"><b>${a.locked}</b>копится за неделю, откроется ${sundayLabel()}</span>
+      ${F.weekly(S.cfg) ? `<span class="stat"><b>${a.locked}</b>копится за неделю, откроется ${sundayLabel()}</span>` : ""}
       ${a.reserved ? `<span class="stat"><b>${a.reserved}</b>в заявках на награды</span>` : ""}
       ${a.deposited + a.depPending ? `<span class="stat"><b>${a.deposited + a.depPending}</b>на депозитах</span>` : ""}
     </div></section>`;
@@ -392,7 +392,7 @@ function kidToday(k) {
 }
 function kidShop(k) {
   const a = acct(k.id);
-  let out = `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Мои баллы</h2></div><div class="kids-sum"><div class="ks"><span>Можно потратить</span><span class="v num">${a.available}</span></div><div class="ks"><span>Копится за неделю</span><span class="v num">${a.locked}</span><small class="hint">откроется ${sundayLabel()}</small></div></div></section>`;
+  let out = `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Мои баллы</h2></div><div class="kids-sum"><div class="ks"><span>Можно потратить</span><span class="v num">${a.available}</span></div>${F.weekly(S.cfg) ? `<div class="ks"><span>Копится за неделю</span><span class="v num">${a.locked}</span><small class="hint">откроется ${sundayLabel()}</small></div>` : ""}</div></section>`;
   const wishes = F.live(S.cfg.wishes).filter(w => F.forKid(w, k.id));
   out += `<section class="card"><div class="card-head"><h2>${ic("gift", "h")} Магазин желаний</h2><span class="hint">Обменяй баллы на награду</span></div>`;
   out += wishes.length ? `<div class="shop">${wishes.map(w => { const can = a.available >= w.cost, p = Math.max(0, Math.min(100, Math.round(a.available / w.cost * 100)));
@@ -425,11 +425,11 @@ const weekRange = items => { const days = items.map(x => x.day).sort(), a = F.pa
 function ledgerHtml(kid) {
   const L = F.ledger(kid, S.data, S.cfg), a = acct(kid);
   const dep = a.deposited + a.depPending;
-  const sum = `<div class="lg-sum"><div><b class="num">${a.available}</b><span>можно потратить</span></div><div><b class="num">${a.locked}</b><span>копится за неделю</span></div>${dep ? `<div><b class="num">${dep}</b><span>на депозитах</span></div>` : ""}${a.depIncome ? `<div><b class="num">+${a.depIncome}</b><span>заработано на депозитах</span></div>` : ""}</div>`;
+  const sum = `<div class="lg-sum"><div><b class="num">${a.available}</b><span>можно потратить</span></div>${F.weekly(S.cfg) ? `<div><b class="num">${a.locked}</b><span>копится за неделю</span></div>` : ""}${dep ? `<div><b class="num">${dep}</b><span>на депозитах</span></div>` : ""}${a.depIncome ? `<div><b class="num">+${a.depIncome}</b><span>заработано на депозитах</span></div>` : ""}</div>`;
   const look = { task: ["check-circle", "t"], wish: ["gift", "w"], gift: ["gift", "g"], bonus: ["medal", "g"], fine: ["minus-circle", "w"], depin: ["piggy", "d"], depout: ["piggy", "g"], depclosed: ["piggy", "d"] };
   const label = x => ({ task: esc(x.title), wish: `Награда «${esc(x.title)}»`, gift: "Подарок от родителей", bonus: "Бонус от родителей", fine: "Списание",
     depin: `На депозит «${esc(x.title)}»`, depout: `Депозит «${esc(x.title)}» вернулся`, depclosed: `Депозит «${esc(x.title)}» закрыт досрочно` })[x.kind];
-  const sub = x => x.kind === "task" ? `за ${humanDay(x.day).split(",")[0]}${x.instant ? " · сразу в банк" : ""}`
+  const sub = x => x.kind === "task" ? `за ${humanDay(x.day).split(",")[0]}${x.instant && F.weekly(S.cfg) ? " · сразу в банк" : ""}`
     : x.kind === "depout" ? `${x.principal} + ${x.interest} прибавка` : x.kind === "depclosed" ? "без прибавки"
     : x.pending ? (x.kind === "wish" ? "ждёт решения родителей" : "открывается") : (x.kind === "gift" || x.kind === "bonus" || x.kind === "fine") && x.title ? esc(x.title) : "";
   const row = x => { if (x.kind === "tasks") return many(x); const [i, c] = look[x.kind] || ["coins", "t"], plus = x.amount >= 0;
@@ -578,7 +578,7 @@ function dayPanel(kid, s, parentMode) {
   const info = sum.info;
   let out = `<section class="card"><div class="card-head"><h2>${humanDay(s)}</h2><span class="pill ${info.type === "off" ? "ok" : "wait"}">${info.type === "off" ? "выходной" : "рабочий день"}</span></div>
     ${info.name ? `<p class="hint">${esc(info.name)}</p>` : ""}
-    ${k ? "" : `<p class="hint">Добавьте детей в «Настройки → Дети» — здесь появятся их баллы и пропуски.</p>`}<div class="kids-sum" ${k ? "" : "hidden"}><div class="ks"><span>За день</span><span class="v num">+${sum.pts}</span></div><div class="ks"><span>За неделю ${+ws.slice(8)}–${+we.slice(8)}</span><span class="v num">+${weekPts}</span><small class="hint">${Date.now() >= activeAt ? "уже доступны для трат" : `станут доступны ${+we.slice(8)} ${MONTHS_G[+we.slice(5, 7) - 1]} в ${F.creditTime(S.cfg)}`}</small></div></div>`;
+    ${k ? "" : `<p class="hint">Добавьте детей в «Настройки → Дети» — здесь появятся их баллы и пропуски.</p>`}<div class="kids-sum" ${k ? "" : "hidden"}><div class="ks"><span>За день</span><span class="v num">+${sum.pts}</span></div><div class="ks"><span>За неделю ${+ws.slice(8)}–${+we.slice(8)}</span><span class="v num">+${weekPts}</span>${F.weekly(S.cfg) ? `<small class="hint">${Date.now() >= activeAt ? "уже доступны для трат" : `станут доступны ${+we.slice(8)} ${MONTHS_G[+we.slice(5, 7) - 1]} в ${F.creditTime(S.cfg)}`}</small>` : ""}</div></div>`;
   const rows = [];
   sum.done.forEach(e => rows.push(`<div class="it"><span>${esc(e.title)}${F.mult(S.cfg, s, e.ref) > 1 ? `<span class="x2">×2</span>` : ""}<br><small>${fmtTime(e.at)}</small></span>${e.status === "ok" ? `<span class="pill ok">принято</span>` : e.status === "no" ? `<span class="pill no">не засчитано</span>` : e.status === "redo" ? `<span class="pill wait">доработка</span>` : `<span class="pill wait">проверяется</span>`}<span class="delta num ${e.status === "ok" ? "plus" : ""}">+${e.value}</span></div>`));
   sum.missed.forEach(t => rows.push(`<div class="it"><span>${esc(t.title)}<br><small>обязательное дело${t.time ? " · " + esc(t.time) : ""}</small></span><span class="pill no">пропущено</span>${parentMode ? `<button class="btn sm ghost" data-act="credit" data-id="${t.id}" data-kid="${kid}">Засчитать</button>` : `<span class="delta">0</span>`}</div>`));
@@ -625,7 +625,7 @@ function parentReview() {
       : `<button class="btn ok sm" data-act="approve" data-id="${e.id}">Принять</button><button class="btn sm ghost" data-act="redo" data-id="${e.id}">На доработку</button><button class="btn no sm" data-act="reject" data-id="${e.id}">Не засчитать</button>`;
     return `<div class="req"><div><b>${e.type === "wish" ? `${ic("gift", "xs gold")} Хочет обменять: ` : ""}${esc(e.title)}</b><br><small class="hint">${esc(k?.name || "")} · ${humanDay(e.day)}, ${fmtTime(e.at)} · <span class="num">${e.type === "wish" ? "−" : "+"}${e.value}</span>${F.mult(S.cfg, e.day, e.ref) > 1 && e.type === "task" ? " (×2)" : ""}${e.late ? " · с опозданием" : ""}${e.manual ? " · засчитано родителем" : ""}</small></div>
       ${e.checks?.length ? `<ul class="checks-ro">${e.checks.map(c => `<li>${ic("check", "xs")} ${esc(c)}</li>`).join("")}</ul>` : ""}${photos}${e.resent ? `<small class="hint">Прислано повторно после доработки</small>` : ""}
-      ${e.type === "task" ? `<label class="inline instant"><input type="checkbox" data-instant="${e.id}" ${S.instant.has(e.id) ? "checked" : ""}> Сразу в банк — баллы можно потратить сейчас, не дожидаясь воскресенья</label>` : ""}
+      ${e.type === "task" && F.weekly(S.cfg) ? `<label class="inline instant"><input type="checkbox" data-instant="${e.id}" ${S.instant.has(e.id) ? "checked" : ""}> Сразу в банк — баллы можно потратить сейчас, не дожидаясь воскресенья</label>` : ""}
       <div class="act">${btns}</div></div>`;
   }).join("");
   out += `<p class="hint">Дети видят решения как итог автоматической проверки. Комментарий «на доработку» они увидят с пометкой «Проверка».</p></section>`;
@@ -1059,7 +1059,7 @@ function parentSettings() {
       ${row("kids", "smile", "violet", "Дети", esc(kidNames))}
     </div></div>
     <div class="set-group"><h3>Правила</h3><div class="set-list">
-      ${row("points", "trophy", "gold", "Баллы", `Зачисление в ${esc(F.creditTime(S.cfg))}, трата после воскресенья`)}
+      ${row("points", "trophy", "gold", "Баллы", F.weekly(S.cfg) ? `Зачисление в ${esc(F.creditTime(S.cfg))}, трата после воскресенья` : `Сразу после проверки · итоги дня в ${esc(F.creditTime(S.cfg))}`)}
       ${row("check", "camera", "rose", "Проверка и фото", `Фото хранятся ${photoLabel(photoDays())}`)}
     </div></div>
     <div class="set-group"><h3>Это устройство</h3><div class="set-list">
@@ -1097,10 +1097,15 @@ function settingsPage(p) {
       <label>Возраст<input id="ka-${k.id}" name="a-${k.id}" type="number" inputmode="numeric" min="3" max="18" value="${k.age || ""}"></label>
       <label>Цвет<select id="kc-${k.id}" name="c-${k.id}">${Object.keys(COLORS).map(c => `<option value="${c}" ${k.color === c ? "selected" : ""}>${{ violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой" }[c]}</option>`).join("")}</select></label>`).join("")}
       <div class="full btnrow"><button class="btn go">Сохранить</button><button type="button" class="btn ghost" data-act="addKid">${ic("plus")} Добавить ребёнка</button></div></form></section>`;
-  if (p === "points") return head("Баллы") + `<section class="card"><form class="grid" data-form="set-points">
-      <label>Время вечернего начисления<input id="s-ct" name="ct" type="time" value="${esc(st.creditTime || "21:00")}"></label>
+  if (p === "points") { const wk = F.weekly(S.cfg); return head("Баллы") + `<section class="card"><form class="grid" data-form="set-points">
+      <fieldset class="opts"><legend>Когда баллы можно тратить</legend>
+        <label class="opt"><input type="radio" name="po" value="instant" ${wk ? "" : "checked"}><span><b>Сразу после проверки</b><small>Принятое дело сразу пополняет счёт. Копить ребёнок учится на депозитах в «Копилке».</small></span></label>
+        <label class="opt"><input type="radio" name="po" value="weekly" ${wk ? "checked" : ""}><span><b>Раз в неделю</b><small>Баллы копятся всю неделю и открываются в воскресенье. При проверке можно отметить «Сразу в банк».</small></span></label>
+      </fieldset>
+      <label>${wk ? "Время вечернего начисления" : "Время вечерних итогов"}<input id="s-ct" name="ct" type="time" value="${esc(st.creditTime || "21:00")}"></label>
       <div><button class="btn go">Сохранить</button></div></form>
-      <ul class="facts"><li>${ic("check", "xs")} Баллы за принятые дела зачисляются каждый вечер в это время.</li><li>${ic("check", "xs")} Тратить их можно после воскресенья в это же время.</li><li>${ic("check", "xs")} Подарки и бонусы доступны сразу.</li><li>${ic("check", "xs")} Двойные баллы на конкретный день включаются в «Календаре».</li></ul></section>`;
+      <ul class="facts">${wk ? `<li>${ic("check", "xs")} Баллы за принятые дела зачисляются каждый вечер в это время.</li><li>${ic("check", "xs")} Тратить их можно после воскресенья в это же время.</li>`
+        : `<li>${ic("check", "xs")} Баллы за принятое дело можно потратить сразу.</li><li>${ic("check", "xs")} В это время дети получают уведомление с итогами дня.</li>`}<li>${ic("check", "xs")} Подарки и бонусы доступны сразу.</li><li>${ic("check", "xs")} Двойные баллы на конкретный день включаются в «Календаре».</li></ul></section>`; }
   if (p === "check") return head("Проверка и фото") + `<section class="card"><form class="grid" data-form="set-check">
       <label>Хранить фото-отчёты<select id="s-ph" name="ph">${[[7, "1 неделю"], [14, "2 недели"], [30, "1 месяц"], [90, "3 месяца"], [0, "Свой срок…"]].map(([d, n]) => `<option value="${d}" ${(d === photoDays() && [7, 14, 30, 90].includes(d)) || (d === 0 && ![7, 14, 30, 90].includes(photoDays())) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <label id="s-phd-l" ${[7, 14, 30, 90].includes(photoDays()) ? "hidden" : ""}>Свой срок, дней<input id="s-phd" name="phd" type="number" inputmode="numeric" min="1" max="365" value="${photoDays()}"></label>
@@ -1503,7 +1508,7 @@ document.addEventListener("submit", e => {
     S.be.supportMsg(f.dataset.sid, f.dataset.admin ? "support" : "user", text).then(() => { f.reset(); toast(f.dataset.admin ? "Ответ отправлен" : "Сообщение отправлено"); }).catch(fail).finally(() => { btn.disabled = false; });
     return;
   }
-  if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00" } }).then(saved).catch(fail);
+  if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00", payout: f.po?.value === "weekly" ? "weekly" : "instant" } }).then(saved).catch(fail);
   if (kind === "set-check") { const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14)); S.be.setFamily({ settings: { autoAI: false, photoDays: ph } }).then(saved).catch(fail); }
   if (kind === "delFamily") {
     const err = document.getElementById("del-err");
