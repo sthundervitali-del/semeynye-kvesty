@@ -18,7 +18,7 @@
     "Удаляю…": "Deleting…", "Отправляю…": "Sending…", "Создаю код…": "Creating code…",
     // вход и семьи
     "Войти через Google": "Sign in with Google", "Выйти": "Sign out", "Выйти из аккаунта": "Sign out",
-    "Дела по дому и учёба за баллы. Баллы копятся за неделю и обмениваются на награды.": "Chores and study for points. Points add up over the week and are exchanged for rewards.",
+    "Дела по дому и учёба за баллы. Баллы обмениваются на награды или растут на депозитах.": "Chores and schoolwork for points. Points are swapped for rewards or grow on deposits.",
     "Обязательные и дополнительные дела": "Required and bonus tasks", "Напоминания на телефон": "Phone reminders",
     "Календарь с праздниками": "Calendar with holidays", "Награды и подарки": "Rewards and gifts",
     "Каждая семья видит только свои данные.": "Each family sees only its own data.",

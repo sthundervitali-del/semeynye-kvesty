@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.16.0", APP_DATE = "12.11.2026";
+const APP_VERSION = "2.16.1", APP_DATE = "12.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -308,7 +308,7 @@ const GLOGO = `<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true
 function loginScreen() {
   const join = new URLSearchParams(location.search).get("join");
   return `<div class="login"><div class="box"><div class="lang-switch">${["ru", "en"].map(c => `<button data-act="setLang" data-id="${c}" aria-pressed="${I18N.lang() === c}">${c.toUpperCase()}</button>`).join("")}</div><img class="logo" src="${window.FQ_ICON || "/icon.svg"}" alt=""><h1>Family Quests</h1>
-    <p class="hint" style="font-size:15px">Дела по дому и учёба за баллы. Баллы копятся за неделю и обмениваются на награды.</p>
+    <p class="hint" style="font-size:15px">Дела по дому и учёба за баллы. Баллы обмениваются на награды или растут на депозитах.</p>
     ${join ? `<div class="banner">Вас пригласили в семью. Войдите, чтобы присоединиться.</div>` : ""}
     <button class="gbtn" data-act="signIn">${GLOGO} Войти через Google</button>
     <div class="feat"><div>${ic("checklist")}<span>Обязательные и дополнительные дела</span></div><div>${ic("bell")}<span>Напоминания на телефон</span></div><div>${ic("calendar")}<span>Календарь с выходными</span></div><div>${ic("gift")}<span>Награды и подарки</span></div></div>
@@ -615,7 +615,7 @@ function startCard() {
 }
 function parentReview() {
   const pend = pendingList().sort((a, b) => a.at - b.at);
-  let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending; return `<button class="ks ks-btn" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">копится ${a.locked} · сегодня +${a.today} · ${ic("flame", "xs")} ${streak(k.id)}${dep ? ` · на депозитах ${dep}` : ""}</small><small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
+  let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending; return `<button class="ks ks-btn" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">${F.weekly(S.cfg) ? `копится ${a.locked} · ` : ""}сегодня +${a.today} · ${ic("flame", "xs")} ${streak(k.id)}${dep ? ` · на депозитах ${dep}` : ""}</small><small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
   out += `<section class="card"><h2>${ic("inbox", "h")} Ждут проверки${pend.length ? " · " + pend.length : ""}</h2>`;
   if (!pend.length) out += `<div class="empty">${ic("check-circle")}Всё проверено. Новых заявок нет.</div>`;
   else out += pend.map(e => {
