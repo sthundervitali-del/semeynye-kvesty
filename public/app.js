@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.16.1", APP_DATE = "12.11.2026";
+const APP_VERSION = "2.17.0", APP_DATE = "16.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -200,6 +200,12 @@ function recompute() {
       const before = S.prevStatus.get(e.id), cur = now.get(e.id);
       if (before === cur) continue;
       const wasPending = before && before.startsWith("pending");
+      if (e.type === "xfer" && !isParent() && e.kid === kid && wasPending) {
+        const to = kidById(e.ref)?.name || "";
+        if (e.status === "ok") { toast(`Подарок отправлен: ${to} получает ${ptsW(e.value)}`, true); beep("good"); }
+        else if (e.status === "no") toast(`Подарок не отправлен: ${e.dec?.note || "банк отказал"}`, true);
+        continue;
+      }
       if (e.type === "dep" && !isParent() && e.kid === kid && wasPending) {
         if (e.status === "ok") { toast(`Депозит открыт: ${e.value} вернутся ${dShort(e.dep.matureAt)} с прибавкой +${e.dep.interest}`, true); beep("good"); }
         else if (e.status === "no") toast(`Депозит не открыт: ${e.dec?.note || "банк отказал"}`, true);
@@ -239,6 +245,8 @@ function render() {
   if (S.error) { app.innerHTML = errorScreen(); return; }
   if (!S.be || S.user === undefined) { app.innerHTML = `<div class="boot">Загрузка…</div>`; return; }
   if (!S.user) { app.innerHTML = loginScreen(); return; }
+  if (S.loadErr) { app.innerHTML = loadErrScreen(); return; }
+  if (S.booting && !S.fid) { app.innerHTML = `<div class="boot">Загружаю семью…</div>`; return; }
   if (!S.fid) { app.innerHTML = onboardingScreen(); return; }
   if (!S.loaded || !S.cfg) { app.innerHTML = `<div class="boot">Загружаю семью…</div>`; return; }
   if (!S.me) { app.innerHTML = noAccessScreen(); return; }
@@ -314,9 +322,13 @@ function loginScreen() {
     <div class="feat"><div>${ic("checklist")}<span>Обязательные и дополнительные дела</span></div><div>${ic("bell")}<span>Напоминания на телефон</span></div><div>${ic("calendar")}<span>Календарь с выходными</span></div><div>${ic("gift")}<span>Награды и подарки</span></div></div>
     <p class="hint">Каждая семья видит только свои данные.</p></div></div>`;
 }
+// Не удалось узнать, в какой семье пользователь. Не показываем «создать семью», чтобы не завести вторую по ошибке.
+const loadErrScreen = () => `<div class="login"><div class="box"><img class="logo" src="${window.FQ_ICON || "/icon.svg"}" alt=""><h1>Не удалось загрузить семью</h1><p class="hint">Нет связи с сервером. Проверьте интернет и попробуйте ещё раз — ваша семья и все данные на месте.</p><p class="hint">Вы вошли как <b>${esc(S.user?.email || "")}</b></p><button class="btn go big" data-act="retryBoot">Повторить</button><button class="btn ghost" data-act="signOut">Войти другим аккаунтом</button></div></div>`;
 function onboardingScreen() {
   const join = new URLSearchParams(location.search).get("join") || "";
+  const acc = `<section class="card"><div class="state">${ic("users", "h")}<div><b>Вы вошли как ${esc(S.user.email || S.user.displayName || "")}</b><p class="hint">Этот аккаунт пока не состоит ни в одной семье. Если семья уже есть, проверьте, что вошли тем же Google-аккаунтом, которым принимали приглашение.</p></div></div><div class="btnrow"><button class="btn ghost" data-act="signOut">${ic("logout")} Войти другим аккаунтом</button></div></section>`;
   return `<div class="wrap" style="padding-bottom:40px"><header class="top"><div class="brand">${appIcon(36)}<div><h1>Добро пожаловать</h1><small>${esc(S.user.email || "")}</small></div></div><button class="btn sm ghost" data-act="signOut">Выйти</button></header>
+    ${acc}
     <section class="card"><h2>У меня есть код приглашения</h2><p class="hint">Код присылает родитель: «Настройки» → «Участники и приглашения». Подходит детям и второму родителю.</p>
       <form class="grid" data-form="join"><label>Код<input id="j-code" name="code" value="${esc(join)}" autocomplete="off" autocapitalize="characters" required placeholder="Например: K7M2QX9A"></label><div><button class="btn go big">Присоединиться</button></div></form></section>
     <section class="card"><h2>Создать новую семью</h2><p class="hint">Вы станете родителем-администратором. Список дел начнётся пустым: дела и награды выберете из шаблонов или создадите свои.</p>
@@ -392,13 +404,47 @@ function kidToday(k) {
 }
 function kidShop(k) {
   const a = acct(k.id);
-  let out = `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Мои баллы</h2></div><div class="kids-sum"><div class="ks"><span>Можно потратить</span><span class="v num">${a.available}</span></div>${F.weekly(S.cfg) ? `<div class="ks"><span>Копится за неделю</span><span class="v num">${a.locked}</span><small class="hint">откроется ${sundayLabel()}</small></div>` : ""}</div></section>`;
+  let out = `<section class="card"><div class="card-head"><h2>${ic("coins", "h")} Мои баллы</h2></div><div class="kids-sum"><div class="ks"><span>Можно потратить</span><span class="v num">${a.available}</span></div>${F.weekly(S.cfg) ? `<div class="ks"><span>Копится за неделю</span><span class="v num">${a.locked}</span><small class="hint">откроется ${sundayLabel()}</small></div>` : ""}</div>${giftBits(k, a)}</section>`;
   const wishes = F.live(S.cfg.wishes).filter(w => F.forKid(w, k.id));
   out += `<section class="card"><div class="card-head"><h2>${ic("gift", "h")} Магазин желаний</h2><span class="hint">Обменяй баллы на награду</span></div>`;
   out += wishes.length ? `<div class="shop">${wishes.map(w => { const can = a.available >= w.cost, p = Math.max(0, Math.min(100, Math.round(a.available / w.cost * 100)));
     return `<div class="wish"><b>${esc(w.title)}</b><div class="cost num">${coin(16)} ${w.cost}</div>${can ? "" : `<div class="mini"><i style="width:${p}%"></i></div><div class="need num">Ещё ${ptsW(w.cost - a.available)}</div>`}
       <button class="btn ${can ? "dark" : ""}" data-act="wish" data-id="${w.id}" ${can ? "" : "disabled"}>${can ? "Обменять" : "Копим"}</button></div>`; }).join("")}</div>` : `<div class="empty">${ic("gift")}Родители ещё не добавили награды.</div>`;
   return out + `</section>`;
+}
+/* Подарить баллы брату или сестре. Банк (сервер или приложение родителя) проверяет баланс и переводит. */
+const siblings = kid => kidsList().filter(k => k.id !== kid);
+function giftBits(k, a) {
+  const sib = siblings(k.id);
+  if (!sib.length || !F.xferOn(S.cfg) || isParent()) return "";
+  const pend = S.data.entries.filter(e => e.kid === k.id && e.type === "xfer" && e.status === "pending");
+  const can = a.available >= 1;
+  return `${pend.map(e => `<div class="dep-it"><div class="dep-h"><b>${ic("gift", "xs gold")} ${esc(kidById(e.ref)?.name || "")}</b><span class="pill wait">отправляется</span></div><div class="dep-amt num">${coin(16)} ${e.value}</div></div>`).join("")}
+    <div class="btnrow"><button class="btn ${can ? "go" : ""}" data-act="xferOpen" ${can ? "" : "disabled"}>${ic("gift")} ${can ? "Подарить баллы" : "Пока нечего дарить"}</button></div>
+    <p class="hint">Поделись баллами с братом или сестрой: они спишутся с твоего счёта и придут получателю через пару минут.</p>`;
+}
+function xferOpen() {
+  const kid = viewingKid(); if (!kid || isParent()) return;
+  const sib = siblings(kid), max = Math.max(0, acct(kid).available);
+  if (!sib.length || max < 1) return;
+  let to = sib[0].id;
+  modal(`<h2>${ic("gift", "h")} Подарить баллы</h2>
+    ${sib.length > 1 ? `<div class="chips" role="group" aria-label="${tr("Кому")}">${sib.map((k, i) => `<button type="button" class="chip" data-to="${k.id}" aria-pressed="${i === 0}">${esc(k.name)}</button>`).join("")}</div>` : `<p class="hint">${tr("Кому")}: <b>${esc(sib[0].name)}</b></p>`}
+    <label>Сколько баллов<input id="xf-amt" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${Math.min(max, 10)}"></label>
+    <p class="hint num">Можно подарить до ${ptsW(max)}</p>
+    <label>Пожелание (необязательно)<input id="xf-msg" maxlength="120" placeholder="Например: Спасибо, что помог!"></label>
+    <p class="err" id="xf-err"></p>
+    <div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn go" id="xf-ok">Подарить</button></div>`,
+  m => {
+    const inp = m.querySelector("#xf-amt"), err = m.querySelector("#xf-err"), ok = m.querySelector("#xf-ok");
+    m.querySelectorAll("[data-to]").forEach(b => b.onclick = () => { to = b.dataset.to; m.querySelectorAll("[data-to]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+    const upd = () => { const v = Math.floor(+inp.value || 0), bad = v < 1 || v > max; err.textContent = bad ? tr(v > max ? "Столько баллов сейчас нет." : "Нужно хотя бы 1 балл.") : ""; ok.disabled = bad; };
+    inp.oninput = upd; upd();
+    ok.onclick = () => { const v = Math.floor(+inp.value || 0); if (v < 1 || v > acct(kid).available) return upd();
+      ok.disabled = true;
+      S.be.putEntry(kid, F.monthKey(), { id: uid("x"), kid, type: "xfer", ref: to, title: m.querySelector("#xf-msg").value.trim().slice(0, 120), pts: v, day: today(), at: Date.now() })
+        .then(() => { closeModal(); toast("Подарок отправлен — баллы придут через пару минут"); }).catch(e => { ok.disabled = false; fail(e); }); };
+  });
 }
 function histRow(e) {
   if (e.kind) { // подарок / бонус
@@ -416,7 +462,7 @@ function kidHistory(k) {
   const mode = S.histMode === "req" ? "req" : "pts";
   const seg = `<div class="seg" role="group" aria-label="Что показать">${[["pts", "Баллы"], ["req", "Заявки"]].map(([v, n]) => `<button data-act="histMode" data-id="${v}" aria-pressed="${mode === v}">${n}</button>`).join("")}</div>`;
   if (mode === "pts") return `<section class="card"><div class="card-head"><h2>${ic("history", "h")} История баллов</h2></div>${seg}${ledgerHtml(k.id)}</section>`;
-  const items = [...S.data.entries.filter(e => e.kid === k.id && e.type !== "dep" && e.type !== "depclose"), ...S.data.gifts.filter(g => g.kid === k.id)].sort((a, b) => b.at - a.at).slice(0, 60);
+  const items = [...S.data.entries.filter(e => e.kid === k.id && !["dep", "depclose", "xfer"].includes(e.type)), ...S.data.gifts.filter(g => g.kid === k.id)].sort((a, b) => b.at - a.at).slice(0, 60);
   return `<section class="card"><div class="card-head"><h2>${ic("history", "h")} Заявки</h2></div>${seg}${items.length ? `<div class="list">${items.map(histRow).join("")}</div>` : `<div class="empty">${ic("history")}Тут появятся выполненные дела и награды.</div>`}</section>`;
 }
 const weekRange = items => { const days = items.map(x => x.day).sort(), a = F.parseDay(days[0]), b = F.parseDay(days.at(-1));
@@ -426,12 +472,14 @@ function ledgerHtml(kid) {
   const L = F.ledger(kid, S.data, S.cfg), a = acct(kid);
   const dep = a.deposited + a.depPending;
   const sum = `<div class="lg-sum"><div><b class="num">${a.available}</b><span>можно потратить</span></div>${F.weekly(S.cfg) ? `<div><b class="num">${a.locked}</b><span>копится за неделю</span></div>` : ""}${dep ? `<div><b class="num">${dep}</b><span>на депозитах</span></div>` : ""}${a.depIncome ? `<div><b class="num">+${a.depIncome}</b><span>заработано на депозитах</span></div>` : ""}</div>`;
-  const look = { task: ["check-circle", "t"], wish: ["gift", "w"], gift: ["gift", "g"], bonus: ["medal", "g"], fine: ["minus-circle", "w"], depin: ["piggy", "d"], depout: ["piggy", "g"], depclosed: ["piggy", "d"] };
+  const look = { task: ["check-circle", "t"], wish: ["gift", "w"], gift: ["gift", "g"], bonus: ["medal", "g"], fine: ["minus-circle", "w"], depin: ["piggy", "d"], depout: ["piggy", "g"], depclosed: ["piggy", "d"], xferout: ["gift", "w"], xferin: ["gift", "g"] };
   const label = x => ({ task: esc(x.title), wish: `Награда «${esc(x.title)}»`, gift: "Подарок от родителей", bonus: "Бонус от родителей", fine: "Списание",
-    depin: `На депозит «${esc(x.title)}»`, depout: `Депозит «${esc(x.title)}» вернулся`, depclosed: `Депозит «${esc(x.title)}» закрыт досрочно` })[x.kind];
+    depin: `На депозит «${esc(x.title)}»`, depout: `Депозит «${esc(x.title)}» вернулся`, depclosed: `Депозит «${esc(x.title)}» закрыт досрочно`,
+    xferout: `Подарок: ${esc(kidById(x.to)?.name || "")}`, xferin: `Подарок от: ${esc(kidById(x.from)?.name || "")}` })[x.kind];
   const sub = x => x.kind === "task" ? `за ${humanDay(x.day).split(",")[0]}${x.instant && F.weekly(S.cfg) ? " · сразу в банк" : ""}`
     : x.kind === "depout" ? `${x.principal} + ${x.interest} прибавка` : x.kind === "depclosed" ? "без прибавки"
-    : x.pending ? (x.kind === "wish" ? "ждёт решения родителей" : "открывается") : (x.kind === "gift" || x.kind === "bonus" || x.kind === "fine") && x.title ? esc(x.title) : "";
+    : x.pending ? (x.kind === "wish" ? "ждёт решения родителей" : x.kind === "xferout" ? "отправляется" : "открывается")
+    : (x.kind === "xferout" || x.kind === "xferin") && x.title ? esc(x.title) : (x.kind === "gift" || x.kind === "bonus" || x.kind === "fine") && x.title ? esc(x.title) : "";
   const row = x => { if (x.kind === "tasks") return many(x); const [i, c] = look[x.kind] || ["coins", "t"], plus = x.amount >= 0;
     return `<div class="lg ${x.pending ? "wait" : ""}"><span class="lg-ic c-${c}">${ic(i)}</span><span class="lg-t"><b>${label(x)}</b><small>${fmtTime(x.at)}${sub(x) ? " · " + sub(x) : ""}</small></span><span class="lg-r"><span class="delta num ${plus ? "plus" : "minus"}">${plus ? "+" : "−"}${Math.abs(x.amount)}</span>${x.balance == null ? "" : `<small class="num">остаток ${x.balance}</small>`}</span></div>`; };
   const dayName = ts => { const d = F.dayKey(new Date(ts)); return d === today() ? "Сегодня" : d === F.addDays(today(), -1) ? "Вчера" : humanDay(d); };
@@ -527,6 +575,13 @@ function maybeShowGift() {
   if (dm) {
     modal(`<div class="gift-ic">${ic("piggy")}</div><h2>Депозит вырос!</h2><div class="amt num">+${dm.dep.interest}</div><p class="hint">«${esc(dm.dep.plan || dm.title)}» закрылся: вернулось ${ptsW(dm.value + dm.dep.interest)} — ${dm.value} и ${dm.dep.interest} прибавка. Баллы уже можно тратить.</p><div class="btns" style="justify-content:center"><button class="btn go big" id="gift-ok">Здорово!</button></div>`,
       m => { confetti(); beep("good"); m.querySelector("#gift-ok").onclick = () => { closeModal(); markSeen(dm.id + "_m"); setTimeout(maybeShowGift, 300); }; }, "gift");
+    return;
+  }
+  const xg = S.data.entries.find(e => F.isGiftTo(e, kid) && !seen.has(e.id + "_x") && Date.now() - e.at < 14 * F.DAY_MS);
+  if (xg) {
+    const from = kidById(xg.kid)?.name || "";
+    modal(`<div class="gift-ic">${ic("gift")}</div><h2>Тебе подарок!</h2><div class="amt num">+${ptsW(xg.value)}</div>${xg.title ? `<div class="msg">${esc(xg.title)}</div>` : ""}<p class="hint">${esc(from)} дарит тебе баллы. Они уже на счету — их можно тратить.</p><div class="btns" style="justify-content:center"><button class="btn go big" id="gift-ok">Спасибо!</button></div>`,
+      m => { confetti(); beep("good"); m.querySelector("#gift-ok").onclick = () => { closeModal(); markSeen(xg.id + "_x"); setTimeout(maybeShowGift, 300); }; }, "gift");
     return;
   }
   const g = S.data.gifts.find(x => x.kid === kid && x.kind === "gift" && !seen.has(x.id));
@@ -629,7 +684,7 @@ function parentReview() {
       <div class="act">${btns}</div></div>`;
   }).join("");
   out += `<p class="hint">Дети видят решения как итог автоматической проверки. Комментарий «на доработку» они увидят с пометкой «Проверка».</p></section>`;
-  const recent = S.data.entries.filter(e => e.dec?.status && e.type !== "game").sort((a, b) => (b.dec.decidedAt || 0) - (a.dec.decidedAt || 0)).slice(0, 8);
+  const recent = S.data.entries.filter(e => e.dec?.status && e.type !== "game" && e.type !== "xfer").sort((a, b) => (b.dec.decidedAt || 0) - (a.dec.decidedAt || 0)).slice(0, 8);
   if (recent.length) out += `<section class="card"><h2>${ic("history", "h")} Недавние решения</h2><div class="list">${recent.map(e => `<div class="it"><span>${esc(kidById(e.kid)?.name || "")}: ${esc(e.title)}<br><small>${fmtDate(e.dec.decidedAt || e.at)}</small></span><span class="pill ${e.status === "ok" ? "ok" : e.status === "no" ? "no" : "wait"}">${{ ok: "принято", no: "отклонено", redo: "доработка", pending: "повторно" }[e.status]}</span><button class="btn sm ghost" data-act="undo" data-id="${e.id}">Отменить</button></div>`).join("")}</div></section>`;
   setTimeout(loadPhotos, 0);
   return out;
@@ -1103,6 +1158,7 @@ function settingsPage(p) {
         <label class="opt"><input type="radio" name="po" value="weekly" ${wk ? "checked" : ""}><span><b>Раз в неделю</b><small>Баллы копятся всю неделю и открываются в воскресенье. При проверке можно отметить «Сразу в банк».</small></span></label>
       </fieldset>
       <label>${wk ? "Время вечернего начисления" : "Время вечерних итогов"}<input id="s-ct" name="ct" type="time" value="${esc(st.creditTime || "21:00")}"></label>
+      <label class="inline full"><input type="checkbox" name="xf" ${F.xferOn(S.cfg) ? "checked" : ""}> Дети могут дарить баллы друг другу</label>
       <div><button class="btn go">Сохранить</button></div></form>
       <ul class="facts">${wk ? `<li>${ic("check", "xs")} Баллы за принятые дела зачисляются каждый вечер в это время.</li><li>${ic("check", "xs")} Тратить их можно после воскресенья в это же время.</li>`
         : `<li>${ic("check", "xs")} Баллы за принятое дело можно потратить сразу.</li><li>${ic("check", "xs")} В это время дети получают уведомление с итогами дня.</li>`}<li>${ic("check", "xs")} Подарки и бонусы доступны сразу.</li><li>${ic("check", "xs")} Двойные баллы на конкретный день включаются в «Календаре».</li></ul></section>`; }
@@ -1413,7 +1469,8 @@ document.addEventListener("click", e => {
   if (act === "allOff") { ask("Выключить все дела?", "Выключить", () => { const map = {}; F.live(S.cfg.tasks).forEach(t => { if (t.active !== false) map[t.id] = { ...t, active: false }; });
     S.be.setFamily({ tasks: map }).then(() => toast("Все дела выключены")).catch(fail); }, true); return; }
   if (act === "signIn") return S.be.signIn().catch(err => toast("Не удалось войти: " + (err.message || err.code)));
-  if (act === "signOut") return S.be.signOut();
+  if (act === "signOut") { S.loadErr = false; return S.be.signOut(); }
+  if (act === "retryBoot") { S.loadErr = false; render(); return boot2(false); }
   if (act === "demoRole") { const uidMap = { parent: "demo-parent", k1: "demo-k1", k2: "demo-k2" }; S.user = { ...S.user, uid: uidMap[id] }; S.me = S.members.find(m => m.uid === S.user.uid); S.preview = null; S.tab = null; S.prevStatus = null; recompute(); render(); return; }
   if (act === "preview") { S.preview = id; S.tab = "today"; window.scrollTo(0, 0); render(); return; }
   if (act === "endPreview") { S.preview = null; S.tab = "settings"; S.setPage = "kids"; render(); return; }
@@ -1430,6 +1487,7 @@ document.addEventListener("click", e => {
   if (act === "ledger") return ledgerModal(id);
   if (act === "histMode") { S.histMode = id; return render(); }
   if (act === "depOpen") return depOpen(id);
+  if (act === "xferOpen") return xferOpen();
   if (act === "depForm") return depForm(id);
   if (act === "tplDeps") return depTemplates();
   if (act === "depClose") { const en = S.data.entries.find(x => x.id === id && x.type === "dep"), kid = viewingKid(); if (!en || !kid || isParent()) return;
@@ -1508,7 +1566,7 @@ document.addEventListener("submit", e => {
     S.be.supportMsg(f.dataset.sid, f.dataset.admin ? "support" : "user", text).then(() => { f.reset(); toast(f.dataset.admin ? "Ответ отправлен" : "Сообщение отправлено"); }).catch(fail).finally(() => { btn.disabled = false; });
     return;
   }
-  if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00", payout: f.po?.value === "weekly" ? "weekly" : "instant" } }).then(saved).catch(fail);
+  if (kind === "set-points") S.be.setFamily({ settings: { creditTime: f.ct.value || "21:00", payout: f.po?.value === "weekly" ? "weekly" : "instant", xfer: !!f.xf?.checked } }).then(saved).catch(fail);
   if (kind === "set-check") { const ph = +f.ph.value || Math.min(365, Math.max(1, parseInt(f.phd.value) || 14)); S.be.setFamily({ settings: { autoAI: false, photoDays: ph } }).then(saved).catch(fail); }
   if (kind === "delFamily") {
     const err = document.getElementById("del-err");
@@ -1554,15 +1612,18 @@ function openFamily(fid) {
   }, 15000);
 }
 async function boot2(chooser) {
+  S.loadErr = false; S.booting = true;
   try {
     S.families = await S.be.myFamilies(S.user);
+    S.booting = false;
     const join = new URLSearchParams(location.search).get("join");
     if (join && !chooser) { render(); return; } // покажем форму с кодом
     const saved = lsGet("fq-fid");
     const fid = !chooser && (S.families.includes(saved) ? saved : S.families[0]);
     if (fid) openFamily(fid); else render();
-  } catch (e) { console.error(e); toast("Не удалось загрузить данные. Проверьте интернет.", true); render(); }
+  } catch (e) { console.error(e); S.booting = false; S.loadErr = true; render(); }
 }
+addEventListener("online", () => { if (S.loadErr && S.user) { S.loadErr = false; boot2(false); } });
 (async function boot() {
   const demo = new URLSearchParams(location.search).has("demo");
   try { S.be = demo ? demoBackend(demoSeed) : await firebaseBackend(); }

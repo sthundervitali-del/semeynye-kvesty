@@ -94,7 +94,7 @@ var FQ = (function () {
   function strList(v, max, re) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === "string" && (!re || re.test(x)); }).slice(0, max).map(function (x) { return x.slice(0, 300); }) : []; }
   function cleanEntry(x, kid) {
     if (!x || typeof x !== "object" || typeof x.id !== "string" || !ID_RE.test(x.id)) return null;
-    var type = ["task", "wish", "game", "dep", "depclose"].indexOf(x.type) >= 0 ? x.type : null;
+    var type = ["task", "wish", "game", "dep", "depclose", "xfer"].indexOf(x.type) >= 0 ? x.type : null;
     if (!type || typeof x.day !== "string" || !DAY_RE.test(x.day)) return null;
     return {
       id: x.id, kid: kid, type: type, day: x.day, at: num(x.at, 0, 1e13),
@@ -177,6 +177,9 @@ var FQ = (function () {
     return y;
   }
 
+  // Подарок от брата или сестры: запись xfer другого ребёнка, принятая банком (ref — кому, title — пожелание).
+  function isGiftTo(e, kid) { return e.type === "xfer" && e.status === "ok" && e.ref === kid && e.kid !== kid; }
+  function xferOn(cfg) { return !(cfg && cfg.settings && cfg.settings.xfer === false); }
   function creditTime(cfg) { return (cfg && cfg.settings && cfg.settings.creditTime) || "21:00"; }
   // Режим зачисления: "instant" (по умолчанию) — баллы доступны сразу после проверки;
   // "weekly" — копятся всю неделю и открываются в воскресенье в creditTime.
@@ -210,15 +213,26 @@ var FQ = (function () {
     now = now || Date.now();
     var out = [], plans = (cfg && cfg.deposits) || {};
     var work = { entries: data.entries.slice(), gifts: data.gifts };
-    var pend = work.entries.filter(function (e) { return e.type === "dep" && e.status === "pending" && !e.withdrawn; }).sort(function (a, b) { return a.at - b.at; });
+    var spends = function (x) { return (x.type === "dep" || x.type === "xfer") && x.status === "pending" && !x.withdrawn; };
+    var pend = work.entries.filter(spends).sort(function (a, b) { return a.at - b.at; });
     pend.forEach(function (e) {
-      var plan = plans[e.ref];
-      // Баланс считаем без более поздних необработанных депозитов этого ребёнка.
-      var later = function (x) { return x.type === "dep" && x.status === "pending" && x.kid === e.kid && x.at > e.at; };
+      // Баланс считаем без более поздних необработанных депозитов и подарков этого ребёнка.
+      var later = function (x) { return spends(x) && x.kid === e.kid && x.at > e.at; };
       var view = { entries: work.entries.filter(function (x) { return !later(x); }), gifts: work.gifts };
-      var acc = account(e.kid, view, cfg, now);
+      var acc = account(e.kid, view, cfg, now), dec;
+      if (e.type === "xfer") {
+        var kids = live(cfg && cfg.kids).map(function (k) { return k.id; });
+        var why = !xferOn(cfg) ? "Подарки баллов выключены родителями" : e.ref === e.kid || kids.indexOf(e.ref) < 0 || kids.indexOf(e.kid) < 0 ? "Некому дарить"
+          : !(e.value >= 1 && e.value === Math.floor(e.value)) ? "Неверная сумма" : acc.available < 0 ? "Не хватает баллов" : "";
+        dec = why ? { status: "no", note: why, decidedAt: now }
+          : { status: "ok", note: "", decidedAt: now, snap: { type: "xfer", ref: e.ref, title: e.title, day: dayKey(new Date(now)), at: now, value: e.value } };
+        out.push({ doc: e.doc, id: e.id, patch: dec });
+        var j = work.entries.indexOf(e);
+        work.entries[j] = Object.assign({}, e, { status: dec.status, dec: dec }, dec.status === "ok" ? { at: now } : {});
+        return;
+      }
+      var plan = plans[e.ref];
       var ok = plan && !plan.del && plan.active !== false && e.value >= Math.max(1, num(plan.min, 0, 1e6)) && e.value === Math.floor(e.value) && acc.available >= 0;
-      var dec;
       if (ok) {
         var days = Math.max(1, Math.round(num(plan.days, 1, 3650))), pct = num(plan.pct, 0, 1000);
         dec = { status: "ok", note: "", decidedAt: now, snap: { type: "dep", ref: e.ref, title: e.title, day: dayKey(new Date(now)), at: now, value: e.value, pct: pct, days: days, matureAt: now + days * DAY_MS, planTitle: str(plan.title, 80) } };
@@ -244,11 +258,13 @@ var FQ = (function () {
     now = now || Date.now();
     var ev = [], upcoming = [];
     data.entries.forEach(function (e) {
+      if (isGiftTo(e, kid)) { ev.push({ at: e.at, kind: "xferin", from: e.kid, title: e.title, amount: e.value, id: e.id + "_in" }); return; }
       if (e.kid !== kid) return;
       if (e.type === "task" && e.status === "ok") {
         var t = activeAt(e, cfg), it = { at: t, kind: "task", title: e.title, amount: e.value, day: e.day, instant: isInstant(e, cfg), id: e.id };
         if (t <= now) ev.push(it); else upcoming.push(it);
       } else if (e.type === "wish" && e.status !== "no") ev.push({ at: e.at, kind: "wish", title: e.title, amount: -e.value, pending: e.status === "pending", id: e.id });
+      else if (e.type === "xfer" && e.status !== "no") ev.push({ at: e.at, kind: "xferout", to: e.ref, title: e.title, amount: -e.value, pending: e.status === "pending", id: e.id });
       else if (e.type === "dep" && e.status !== "no") {
         var st = depState(e, now), plan = (e.dep && e.dep.plan) || e.title;
         ev.push({ at: e.status === "ok" ? e.dep.startAt || e.at : e.at, kind: "depin", title: plan, amount: -e.value, pending: st === "pending", id: e.id });
@@ -266,10 +282,12 @@ var FQ = (function () {
   /* Счёт ребёнка на момент now. */
   function account(kid, data, cfg, now) {
     now = now || Date.now();
-    var r = { available: 0, locked: 0, tonight: 0, reserved: 0, earnedTotal: 0, gifts: 0, today: 0, week: 0, deposited: 0, depPending: 0, depIncome: 0 };
+    var r = { available: 0, locked: 0, tonight: 0, reserved: 0, earnedTotal: 0, gifts: 0, today: 0, week: 0, deposited: 0, depPending: 0, depIncome: 0, given: 0, givePending: 0, received: 0 };
     var today = dayKey(new Date(now)), ws = weekStart(today);
     data.entries.forEach(function (e) {
+      if (isGiftTo(e, kid)) { r.available += e.value; r.received += e.value; return; }
       if (e.kid !== kid) return;
+      if (e.type === "xfer" && e.status !== "no") { r.available -= e.value; if (e.status === "pending") r.givePending += e.value; else r.given += e.value; }
       if (e.type === "task" && e.status === "ok") {
         r.earnedTotal += e.value;
         if (e.day === today) r.today += e.value;
@@ -349,7 +367,7 @@ var FQ = (function () {
     weekStart: weekStart, weekEnd: weekEnd, atTime: atTime, orthodoxEaster: orthodoxEaster, radunitsa: radunitsa,
     dayInfo: dayInfo, category: category, CATEGORY_NAMES: CATEGORY_NAMES, forKid: forKid, live: live, applies: applies,
     mult: mult, deadline: deadline, merge: merge, creditAt: creditAt, activeAt: activeAt, creditTime: creditTime, weekly: weekly, isInstant: isInstant, account: account,
-    taskState: taskState, daySummary: daySummary
+    taskState: taskState, daySummary: daySummary, isGiftTo: isGiftTo, xferOn: xferOn
   };
 })();
 if (typeof module !== "undefined") module.exports = FQ;

@@ -280,7 +280,7 @@ function processFamily(fam) {
   });
 
   // 5. Банк депозитов: открывает депозиты и закрывает досрочно. Баланс считается по всей истории ребёнка.
-  if (data.entries.some(function (e) { return (e.type === "dep" || e.type === "depclose") && e.status === "pending"; })) {
+  if (data.entries.some(function (e) { return (e.type === "dep" || e.type === "depclose" || e.type === "xfer") && e.status === "pending"; })) {
     var full = FQ.merge(fsList("families/" + fid + "/kidlog"), fsList("families/" + fid + "/plog"), cfg);
     var acts = FQ.bankActions(full, cfg, now), byDoc = {};
     acts.forEach(function (x) { (byDoc[x.doc] = byDoc[x.doc] || []).push(x); });
@@ -296,6 +296,17 @@ function processFamily(fam) {
             (en ? e.value + " points will come back on " : e.value + " баллов вернутся ") + new Date(sn.matureAt).toLocaleDateString(en ? "en-GB" : "ru-RU") + (en ? " with +" : " с прибавкой +") + FQ.interestOf(e.value, sn.pct));
           else push(m, fid, en ? "Deposit not opened" : "Депозит не открыт", x.patch.note || "");
         });
+        if (e.type === "xfer" && x.patch.status) {
+          var from = kidName(e.kid), to = kidName(e.ref);
+          if (x.patch.status === "ok") {
+            kidMembers(e.ref).forEach(function (m) { var en = isEn(m);
+              push(m, fid, (en ? "🎁 A gift from " : "🎁 Подарок от: ") + from + " +" + e.value, e.title || (en ? "The points are already in your account. Open the app!" : "Баллы уже на счету. Открой приложение!")); });
+            kidMembers(e.kid).forEach(function (m) { var en = isEn(m);
+              push(m, fid, en ? "🎁 Gift sent" : "🎁 Подарок отправлен", (en ? to + " received " : to + " получает ") + e.value); });
+            parents.forEach(function (m) { var en = isEn(m);
+              push(m, fid, en ? "🎁 Gift between kids" : "🎁 Подарок между детьми", from + " → " + to + ": " + e.value + (e.title ? " · " + e.title : "")); });
+          } else kidMembers(e.kid).forEach(function (m) { var en = isEn(m); push(m, fid, en ? "Gift not sent" : "Подарок не отправлен", x.patch.note || ""); });
+        }
         if (e.type === "dep" && x.patch.closedAt) kidMembers(e.kid).forEach(function (m) { var en = isEn(m);
           push(m, fid, en ? "🐷 Deposit closed early" : "🐷 Депозит закрыт досрочно", (en ? "Returned: " : "Вернулось: ") + e.value); });
       });
@@ -308,6 +319,18 @@ function processFamily(fam) {
       push(m, fid, en ? "🐷 Your deposit has grown!" : "🐷 Депозит вырос!", (en ? "Returned " : "Вернулось ") + (e.value + e.dep.interest) + (en ? ": " + e.value + " + " + e.dep.interest + " bonus" : ": " + e.value + " и " + e.dep.interest + " прибавка")); });
   });
 
+  // Раз в сутки: у каждого участника семья должна быть в списке users/{uid}.families,
+  // иначе при входе с нового устройства приложение предложит создать новую семью.
+  if (once("users_fix")) {
+    var root = "projects/" + prop("PROJECT_ID") + "/databases/(default)/documents/", have = {};
+    fsBatchGet(members.map(function (m) { return "users/" + m.id; })).forEach(function (u) { have[u.id] = (u.families || []).indexOf(fid) >= 0; });
+    var miss = members.filter(function (m) { return !have[m.id]; });
+    if (miss.length) {
+      var rr = call("post", "https://firestore.googleapis.com/v1/" + root + ":commit", { writes: miss.map(function (m) {
+        return { transform: { document: root + "users/" + m.id, fieldTransforms: [{ fieldPath: "families", appendMissingElements: { values: [{ stringValue: fid }] } }] } }; }) });
+      console.log("Семья " + fid + ": восстановлена связь для " + miss.length + " участн. (" + rr.code + ")");
+    }
+  }
   // Удаление старых фото-отчётов раз в сутки (срок — в настройках семьи, по умолчанию 14 дней).
   if (nowMin >= 3 * 60 && once("ph_clean")) {
     var days = +(cfg.settings && cfg.settings.photoDays) || 14;

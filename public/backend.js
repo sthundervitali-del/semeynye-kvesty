@@ -39,7 +39,16 @@ export async function firebaseBackend() {
       }
     },
     signOut: () => A.signOut(auth),
-    async myFamilies(user) { me = user; const s = await getDoc(doc(db, "users", user.uid)); return (s.exists() && s.data().families) || []; },
+    // Список семей берём с сервера: кэш на новом устройстве пуст, и ошибка сети не должна выглядеть как «семьи нет».
+    async myFamilies(user) {
+      me = user; const ref = doc(db, "users", user.uid); let last;
+      for (let i = 0; i < 3; i++) {
+        try { const s = await F.getDocFromServer(ref); return (s.exists() && s.data().families) || []; }
+        catch (e) { last = e; if (e.code === "permission-denied" && i === 0) await user.getIdToken(true).catch(() => {}); await new Promise(r => setTimeout(r, 1500)); }
+      }
+      try { const s = await F.getDocFromCache(ref); if (s.exists() && (s.data().families || []).length) return s.data().families; } catch (_) {}
+      throw last || new Error("families-unavailable");
+    },
     async createFamily(user, name, kids, seed) {
       const id = uid("f");
       await setDoc(doc(db, "families", id), { name, createdBy: user.uid, createdAt: Date.now(), kids, ...seed });
