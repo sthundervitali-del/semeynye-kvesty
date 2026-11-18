@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.17.0", APP_DATE = "16.11.2026";
+const APP_VERSION = "2.18.0", APP_DATE = "18.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -1099,6 +1099,13 @@ function photoLabel(d) { return { 7: "1 неделя", 14: "2 недели", 30:
 function langOptions() {
   return `<div class="lang-opts">${[["ru", "RU", "Русский"], ["en", "EN", "English"]].map(([c, f, n]) => `<button class="lang-opt" data-act="setLang" data-id="${c}" aria-pressed="${I18N.lang() === c}"><span class="flag">${f}</span><span data-noi18n>${n}</span>${I18N.lang() === c ? ic("check") : ""}</button>`).join("")}</div>`;
 }
+const THEMES = [["dark", "Тёмная", "Ночь и золото — как раньше"], ["light", "Светлая", "Светлый фон, удобно днём"], ["auto", "Как в системе", "Меняется вместе с настройкой телефона"]];
+const themeNow = () => window.FQ_THEME?.get?.() || "dark";
+const themeName = () => (THEMES.find(t => t[0] === themeNow()) || THEMES[0])[1];
+const themeIcon = () => themeNow() === "light" ? "sun" : "moon";
+function themeOptions() {
+  return `<div class="lang-opts">${THEMES.map(([c, n, d]) => `<button class="lang-opt" data-act="setTheme" data-id="${c}" aria-pressed="${themeNow() === c}"><span class="theme-sw ${c}"></span><span class="t"><b>${n}</b><small class="hint">${d}</small></span>${themeNow() === c ? ic("check") : ""}</button>`).join("")}</div>`;
+}
 const pushOn = () => { try { return "Notification" in window && Notification.permission === "granted" && lsGet("fq-push") === "1"; } catch (_) { return false; } };
 function pushState() { try { if (!("Notification" in window)) return "Не поддерживаются этим браузером"; if (Notification.permission === "denied") return "Запрещены в настройках браузера"; return pushOn() ? "Включены на этом устройстве" : "Выключены"; } catch (_) { return "Выключены"; } }
 function parentSettings() {
@@ -1120,6 +1127,7 @@ function parentSettings() {
     <div class="set-group"><h3>Это устройство</h3><div class="set-list">
       ${row("notify", "bell", "green", "Уведомления", pushState())}
       ${row("lang", "globe", "blue", "Язык", I18N.lang() === "en" ? "English" : "Русский")}
+      ${row("theme", themeIcon(), "violet", "Тема оформления", themeName())}
     </div></div>
     <div class="set-group"><h3>Помощь</h3><div class="set-list">
       ${row("support", "inbox", "green", "Поддержка", mySupport().some(userUnread) ? "Есть новый ответ" : "Вопрос, ошибка или идея — ответим здесь, в приложении")}
@@ -1171,6 +1179,7 @@ function settingsPage(p) {
       <p class="hint">Родителям приходят заявки на проверку, детям — напоминания об обязательных делах, подарки и одобренные желания. Уведомления включаются на каждом устройстве отдельно.</p>
       <p class="hint">На iPhone сначала добавьте приложение на экран «Домой»: «Поделиться» → «На экран „Домой“».</p>
       <div class="btnrow">${pushOn() ? `<button class="btn ghost" data-act="push">${ic("bell")} Выключить уведомления</button>` : `<button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button>`}<button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
+  if (p === "theme") return head("Тема оформления") + `<section class="card">${themeOptions()}<p class="hint">Тема меняется только на этом устройстве. У детей своя настройка — в их меню.</p></section>`;
   if (p === "lang") return head("Язык") + `<section class="card">${langOptions()}<p class="hint">Язык меняется только на этом устройстве. Уведомления на телефон тоже придут на выбранном языке.</p></section>`;
   const sub = (title, back) => `<div class="sub-head"><button class="btn ghost icon" data-act="setPage" data-id="${back}" aria-label="Назад">${ic("chev-l")}</button><h2>${title}</h2></div>`;
   if (p === "support") {
@@ -1420,6 +1429,11 @@ document.addEventListener("click", e => {
     if (document.querySelector(".scrim")) closeModal();
     render(); return;
   }
+  if (act === "setTheme") {
+    window.FQ_THEME?.set(id);
+    if (document.querySelector(".scrim")) { closeModal(); toast(`Тема: ${themeName()}`); }
+    render(); return;
+  }
   if (act === "setPage") { S.setPage = id || null; window.scrollTo(0, 0); render(); return; }
   if (act === "goSet") { if (document.querySelector(".scrim")) closeModal(); S.tab = "settings"; S.setPage = id || null; window.scrollTo(0, 0); render(); return; }
   if (act === "tplTasks") return taskTemplates();
@@ -1476,7 +1490,7 @@ document.addEventListener("click", e => {
   if (act === "endPreview") { S.preview = null; S.tab = "settings"; S.setPage = "kids"; render(); return; }
   if (act === "avatarEdit") { avatarEditor(); return; }
   if (act === "kidMenu") { modal(`<section class="profile">${avatar(S.user.displayName, S.me?.avatar, "lg edit", `background:${kidColor(kidById(viewingKid()))}`, `data-act="avatarEdit" aria-label="Фото профиля"`, "button")}<span class="t"><b>${esc(S.user.displayName || "")}</b><small>${esc(S.user.email || "")}</small></span></section>
-    <div class="set-list"><button class="set-row" data-act="push"><span class="tile c-green">${ic("bell")}</span><span class="t"><b>Уведомления</b><small>${pushState()}</small></span></button><button class="set-row" data-act="setLang" data-id="${I18N.lang() === "en" ? "ru" : "en"}"><span class="tile c-blue">${ic("globe")}</span><span class="t"><b>Язык</b><small data-noi18n>${I18N.lang() === "en" ? "English → Русский" : "Русский → English"}</small></span></button><button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти</b><small>${esc(S.user.email || "")}</small></span></button></div>
+    <div class="set-list"><button class="set-row" data-act="push"><span class="tile c-green">${ic("bell")}</span><span class="t"><b>Уведомления</b><small>${pushState()}</small></span></button><button class="set-row" data-act="setLang" data-id="${I18N.lang() === "en" ? "ru" : "en"}"><span class="tile c-blue">${ic("globe")}</span><span class="t"><b>Язык</b><small data-noi18n>${I18N.lang() === "en" ? "English → Русский" : "Русский → English"}</small></span></button><button class="set-row" data-act="setTheme" data-id="${({ dark: "light", light: "auto", auto: "dark" })[themeNow()]}"><span class="tile c-violet">${ic(themeIcon())}</span><span class="t"><b>Тема</b><small>${themeName()} → ${(THEMES.find(t => t[0] === ({ dark: "light", light: "auto", auto: "dark" })[themeNow()]) || THEMES[0])[1]}</small></span></button><button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти</b><small>${esc(S.user.email || "")}</small></span></button></div>
     <p class="version">${appIcon(20)} Family Quests · версия ${APP_VERSION}</p>`); return; }
   if (act === "withdraw") { const en = S.data.entries.find(x => x.id === id); if (!canWithdraw(en)) return;
     ask(en.type === "wish" ? `Отменить заявку на «${en.title}»?` : `Отменить «${en.title}»? Дело снова станет невыполненным.`, "Отменить", () => {

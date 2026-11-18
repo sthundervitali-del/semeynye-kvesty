@@ -6,6 +6,12 @@
 <title>Family Quests</title>
 <meta name="description" content="Дела по дому и учёба за баллы, календарь, награды и подарки для всей семьи.">
 <meta name="theme-color" content="#0E1226">
+<script>/* Тема до первой отрисовки: fq-theme = light | dark | auto (по умолчанию тёмная) */
+(function(){var K="fq-theme",v=null,m=window.matchMedia?matchMedia("(prefers-color-scheme: light)"):null;try{v=localStorage.getItem(K)}catch(e){}
+function cur(){return v==="light"||v==="auto"?v:"dark"}
+function apply(){var c=cur(),r=c==="auto"?(m&&m.matches?"light":"dark"):c;document.documentElement.setAttribute("data-theme",r);var tc=document.querySelector('meta[name="theme-color"]');if(tc)tc.setAttribute("content",r==="light"?"#F4F2FA":"#0E1226")}
+window.FQ_THEME={get:cur,set:function(x){v=x;try{x==="dark"?localStorage.removeItem(K):localStorage.setItem(K,x)}catch(e){}apply()}};
+apply();if(m){var f=function(){if(cur()==="auto")apply()};m.addEventListener?m.addEventListener("change",f):m.addListener&&m.addListener(f)}})();</script>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -14,7 +20,7 @@
 <meta name="apple-mobile-web-app-title" content="Family Quests">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="application-name" content="Family Quests">
-<meta name="app-version" content="2.17.0">
+<meta name="app-version" content="2.18.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;700&display=swap">
 <link rel="stylesheet" href="/styles.css">
@@ -63,6 +69,8 @@
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 4l8.4 4.4L12 12.8 3.6 8.4z"/><path d="M3.6 12.4L12 16.8l8.4-4.4"/><path d="M3.6 16.2L12 20.6l8.4-4.4"/></symbol>
   <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 11V9.6A2.6 2.6 0 0 1 6.6 7H19l-3-3M20 13v1.4a2.6 2.6 0 0 1-2.6 2.6H5l3 3"/></symbol>
   <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="3.2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.6 14.6A8 8 0 0 1 9.4 4.4a8 8 0 1 0 10.2 10.2z"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c2.4 2.4 3.6 5.3 3.6 8.6s-1.2 6.2-3.6 8.6c-2.4-2.4-3.6-5.3-3.6-8.6S9.6 5.8 12 3.4z"/></symbol>
 </svg>
 <div id="app"><div class="boot">Загрузка…</div></div>
