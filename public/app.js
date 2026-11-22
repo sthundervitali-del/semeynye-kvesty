@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.19.1", APP_DATE = "22.11.2026";
+const APP_VERSION = "2.19.2", APP_DATE = "22.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -165,7 +165,6 @@ function ask(text, yes, onYes, danger) {
   modal(`<h2>${esc(text)}</h2><div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button><button class="btn ${danger ? "no" : "dark"}" id="ask-yes">${esc(yes)}</button></div>`,
     m => m.querySelector("#ask-yes").onclick = () => { closeModal(); onYes(); });
 }
-let actx = null;
 /* Звуки приложения: синтезируются в браузере, выбор хранится на устройстве (fq-sound). */
 const SOUNDS = {
   classic: { n: "Двойной сигнал", alert: [[880, 0], [660, .13]], good: [[660, 0], [880, .13], [1175, .26]], wave: "sine", len: .12 },
@@ -177,17 +176,32 @@ const SOUNDS = {
   none: { n: "Без звука (только вибрация)" }
 };
 const soundNow = () => { const v = lsGet("fq-sound"); return SOUNDS[v] ? v : "classic"; };
+/* Звук собирается в WAV и играет через <audio>: так он слышен и в беззвучном режиме iPhone,
+   и во встроенных браузерах, где Web Audio может быть заглушён. */
+const wavCache = {};
+function soundUrl(id, kind) {
+  const key = id + ":" + kind; if (wavCache[key]) return wavCache[key];
+  const s = SOUNDS[id], notes = kind === "good" ? s.good : s.alert, SR = 22050;
+  const dur = Math.max(...notes.map(([, d]) => d)) + s.len + .05, N = Math.ceil(dur * SR), buf = new Float32Array(N);
+  const wave = p => s.wave === "square" ? (p % 1 < .5 ? 1 : -1) : s.wave === "triangle" ? 1 - 4 * Math.abs((p % 1) - .5) : Math.sin(2 * Math.PI * p);
+  notes.forEach(([f, d, f2]) => {
+    const st = Math.floor(d * SR), L = Math.floor(s.len * SR); let ph = 0;
+    for (let k = 0; k < L && st + k < N; k++) {
+      const t = k / L, fr = f2 ? f * Math.pow(f2 / f, t) : f; ph += fr / SR;
+      const env = Math.min(1, k / (SR * .008)) * Math.pow(1 - t, 2.2);
+      buf[st + k] += wave(ph) * env * (s.wave === "square" ? .35 : 1);
+    }
+  });
+  let peak = 0; for (let k = 0; k < N; k++) peak = Math.max(peak, Math.abs(buf[k]));
+  const g = peak ? .8 / peak : 0, dv = new DataView(new ArrayBuffer(44 + N * 2)), w = (o, str) => [...str].forEach((c, n) => dv.setUint8(o + n, c.charCodeAt(0)));
+  w(0, "RIFF"); dv.setUint32(4, 36 + N * 2, true); w(8, "WAVE"); w(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, SR, true); dv.setUint32(28, SR * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, N * 2, true);
+  for (let k = 0; k < N; k++) dv.setInt16(44 + k * 2, Math.max(-1, Math.min(1, buf[k] * g)) * 32767, true);
+  return wavCache[key] = URL.createObjectURL(new Blob([dv], { type: "audio/wav" }));
+}
 function beep(kind, force) {
-  const s = SOUNDS[force || soundNow()];
-  if (s.alert) try {
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume();
-    (kind === "good" ? s.good : s.alert).forEach(([f, d, f2]) => {
-      const o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + d, v = s.vol || .25;
-      o.type = s.wave; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + s.len);
-      g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + .015); g.gain.exponentialRampToValueAtTime(.0001, t0 + s.len);
-      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + s.len + .02);
-    });
-  } catch (_) {}
+  const id = force || soundNow();
+  if (SOUNDS[id].alert) try { const au = new Audio(soundUrl(id, kind)); au.volume = 1; const p = au.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
   try { navigator.vibrate && navigator.vibrate(kind === "good" ? [60, 40, 60] : [120, 60, 120]); } catch (_) {}
 }
 function soundOptions() {
