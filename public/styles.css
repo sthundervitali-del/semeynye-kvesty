@@ -560,3 +560,7 @@ details.hint{margin-top:4px}
 details.hint summary{cursor:pointer;font-weight:700;color:var(--ink)}
 details.hint p{margin-top:8px}
 .lang-opt .flag .i{margin:0;color:inherit}
+.snd-row{display:flex;gap:8px;align-items:stretch}
+.snd-row .lang-opt{flex:1;min-width:0}
+.snd-play{flex:none;width:56px;min-height:56px;border-radius:14px;padding:0}
+.snd-play.playing{border-color:var(--gold);color:var(--gold-t);background:color-mix(in srgb,var(--gold) 12%,transparent)}

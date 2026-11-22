@@ -166,6 +166,7 @@
     "iOS не даёт менять звук уведомлений веб-приложений — играет стандартный сигнал. Можно включить или выключить звук: «Настройки» → «Уведомления» → Family Quests → «Звуки».": "iOS doesn't let web apps change the notification sound — the standard tone plays. You can turn sound on or off: Settings → Notifications → Family Quests → Sounds.",
     "Убрать время": "Clear time", "Без времени — можно сделать в любое время дня": "No time — can be done any time of the day",
     "Звук: Двойной сигнал": "Sound: Double beep", "Звук: Колокольчик": "Sound: Bell", "Звук: Монетка": "Sound: Coin", "Звук: Маримба": "Sound: Marimba", "Звук: Капля": "Sound: Drop", "Звук: Мелодия": "Sound: Chime", "Звук: Без звука (только вибрация)": "Sound: Silent (vibration only)",
+    "Прослушать": "Play", "▶ — прослушать, не меняя выбор. Нажмите на название, чтобы выбрать звук.": "▶ plays the sound without changing your choice. Tap a name to select it.",
     "Тема оформления": "Appearance", "Тема": "Theme", "Тёмная": "Dark", "Светлая": "Light", "Как в системе": "System",
     "Ночь и золото — как раньше": "Night and gold — the classic look", "Светлый фон, удобно днём": "Light background, easy in daylight",
     "Меняется вместе с настройкой телефона": "Follows your phone's setting",
