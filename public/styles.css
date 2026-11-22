@@ -553,3 +553,10 @@ label.btn{cursor:pointer}
 .grid .opts .opt{flex-direction:row;color:var(--ink);font-size:15px;font-weight:400;margin:0}
 .opt b{color:var(--ink);font-weight:700}
 :root[data-theme="light"] .avatar:not([style*="background"]){color:var(--muted)}
+.tclear{display:flex;gap:8px;align-items:center}
+.tclear input{flex:1}
+.tclear .btn.icon{flex:none;min-height:44px;width:44px;padding:0}
+details.hint{margin-top:4px}
+details.hint summary{cursor:pointer;font-weight:700;color:var(--ink)}
+details.hint p{margin-top:8px}
+.lang-opt .flag .i{margin:0;color:inherit}

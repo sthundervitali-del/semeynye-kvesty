@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.18.0", APP_DATE = "18.11.2026";
+const APP_VERSION = "2.19.0", APP_DATE = "22.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -166,17 +166,34 @@ function ask(text, yes, onYes, danger) {
     m => m.querySelector("#ask-yes").onclick = () => { closeModal(); onYes(); });
 }
 let actx = null;
-function beep(kind) {
-  try {
+/* Звуки приложения: синтезируются в браузере, выбор хранится на устройстве (fq-sound). */
+const SOUNDS = {
+  classic: { n: "Двойной сигнал", alert: [[880, 0], [660, .13]], good: [[660, 0], [880, .13], [1175, .26]], wave: "sine", len: .12 },
+  bell: { n: "Колокольчик", alert: [[1318, 0], [1046, .22]], good: [[1046, 0], [1318, .16], [1568, .32]], wave: "sine", len: .7 },
+  coin: { n: "Монетка", alert: [[988, 0], [1319, .08]], good: [[988, 0], [1319, .08], [1976, .16]], wave: "square", len: .1, vol: .08 },
+  marimba: { n: "Маримба", alert: [[523, 0], [659, .14], [523, .28]], good: [[523, 0], [659, .12], [784, .24], [1046, .36]], wave: "triangle", len: .3 },
+  drop: { n: "Капля", alert: [[1400, 0, 500]], good: [[900, 0, 1500], [1200, .18, 1900]], wave: "sine", len: .22 },
+  chime: { n: "Мелодия", alert: [[784, 0], [988, .15], [1175, .3]], good: [[784, 0], [988, .12], [1175, .24], [1568, .36]], wave: "sine", len: .45 },
+  none: { n: "Без звука (только вибрация)" }
+};
+const soundNow = () => { const v = lsGet("fq-sound"); return SOUNDS[v] ? v : "classic"; };
+function beep(kind, force) {
+  const s = SOUNDS[force || soundNow()];
+  if (s.alert) try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume();
-    (kind === "good" ? [660, 880, 1175] : [880, 660]).forEach((f, i) => {
-      const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = f; const t0 = actx.currentTime + i * .13;
-      g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.25, t0 + .02); g.gain.exponentialRampToValueAtTime(.0001, t0 + .12);
-      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + .14);
+    (kind === "good" ? s.good : s.alert).forEach(([f, d, f2]) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + d, v = s.vol || .25;
+      o.type = s.wave; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + s.len);
+      g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + .015); g.gain.exponentialRampToValueAtTime(.0001, t0 + s.len);
+      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + s.len + .02);
     });
   } catch (_) {}
   try { navigator.vibrate && navigator.vibrate(kind === "good" ? [60, 40, 60] : [120, 60, 120]); } catch (_) {}
 }
+function soundOptions() {
+  return `<div class="lang-opts">${Object.entries(SOUNDS).map(([c, x]) => `<button class="lang-opt" data-act="setSound" data-id="${c}" aria-pressed="${soundNow() === c}"><span class="flag">${ic(c === "none" ? "minus-circle" : "bell")}</span><span class="t"><b>${x.n}</b></span>${soundNow() === c ? ic("check") : ""}</button>`).join("")}</div>`;
+}
+const SYS_SOUND_HINT = `<details class="hint"><summary>Звук, когда приложение закрыто</summary><p>Пока приложение открыто, играет выбранный здесь звук. Когда оно закрыто, уведомление показывает телефон, и звук берётся из его настроек — там можно выбрать любой системный.</p><p><b>Android:</b> нажмите и подержите уведомление Family Quests → значок настроек (или «Настройки» → «Приложения» → Family Quests либо Chrome → «Уведомления») → категория уведомлений → «Звук» → выберите мелодию.</p><p><b>iPhone:</b> iOS не даёт менять звук уведомлений веб-приложений — играет стандартный сигнал. Можно включить или выключить звук: «Настройки» → «Уведомления» → Family Quests → «Звуки».</p></details>`;
 function confetti() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const c = document.createElement("div"); c.className = "confetti";
@@ -1125,7 +1142,7 @@ function parentSettings() {
       ${row("check", "camera", "rose", "Проверка и фото", `Фото хранятся ${photoLabel(photoDays())}`)}
     </div></div>
     <div class="set-group"><h3>Это устройство</h3><div class="set-list">
-      ${row("notify", "bell", "green", "Уведомления", pushState())}
+      ${row("notify", "bell", "green", "Уведомления и звук", `${pushState()} · ${SOUNDS[soundNow()].n}`)}
       ${row("lang", "globe", "blue", "Язык", I18N.lang() === "en" ? "English" : "Русский")}
       ${row("theme", themeIcon(), "violet", "Тема оформления", themeName())}
     </div></div>
@@ -1178,7 +1195,8 @@ function settingsPage(p) {
   if (p === "notify") return head("Уведомления") + `<section class="card"><div class="state">${ic("bell", "h")} <b>${pushState()}</b></div>
       <p class="hint">Родителям приходят заявки на проверку, детям — напоминания об обязательных делах, подарки и одобренные желания. Уведомления включаются на каждом устройстве отдельно.</p>
       <p class="hint">На iPhone сначала добавьте приложение на экран «Домой»: «Поделиться» → «На экран „Домой“».</p>
-      <div class="btnrow">${pushOn() ? `<button class="btn ghost" data-act="push">${ic("bell")} Выключить уведомления</button>` : `<button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button>`}<button class="btn ghost" data-act="beep">Проверить звук</button></div></section>`;
+      <div class="btnrow">${pushOn() ? `<button class="btn ghost" data-act="push">${ic("bell")} Выключить уведомления</button>` : `<button class="btn go" data-act="push">${ic("bell")} Включить уведомления</button>`}</div></section>
+      <section class="card"><h2>${ic("bell", "h")} Звук в приложении</h2>${soundOptions()}${SYS_SOUND_HINT}</section>`;
   if (p === "theme") return head("Тема оформления") + `<section class="card">${themeOptions()}<p class="hint">Тема меняется только на этом устройстве. У детей своя настройка — в их меню.</p></section>`;
   if (p === "lang") return head("Язык") + `<section class="card">${langOptions()}<p class="hint">Язык меняется только на этом устройстве. Уведомления на телефон тоже придут на выбранном языке.</p></section>`;
   const sub = (title, back) => `<div class="sub-head"><button class="btn ghost icon" data-act="setPage" data-id="${back}" aria-label="Назад">${ic("chev-l")}</button><h2>${title}</h2></div>`;
@@ -1218,7 +1236,7 @@ function taskForm(id, cat) {
       <label class="full">Когда<select id="tf-mode" name="mode"><option value="workdays">В рабочие (учебные) дни</option><option value="offdays">В выходные дни</option><option value="days">В выбранные дни недели</option></select></label>
       <div class="full dows" id="tf-dows">${DOW.map((d, i) => `<button type="button" data-dow="${i + 1}" aria-pressed="${t.schedule.days.includes(i + 1)}">${d}</button>`).join("")}</div>
       <label class="inline full" id="tf-skip-l"><input type="checkbox" id="tf-skip" name="skip" ${t.schedule.skipOff ? "checked" : ""}> Не показывать в выходные (суббота, воскресенье и дни, которые вы сделали выходными в «Календаре»)</label>
-      <label>Время (напоминание)<input id="tf-time" name="time" type="time" value="${esc(t.time || "")}"></label>
+      <label>Время (напоминание)<span class="tclear"><input id="tf-time" name="time" type="time" value="${esc(t.time || "")}"><button type="button" class="btn ghost icon" id="tf-time-x" aria-label="Убрать время" title="Убрать время">${ic("x")}</button></span><small id="tf-time-none" class="hint">Без времени — можно сделать в любое время дня</small></label>
       <label id="tf-rep-l">Повторять напоминание<select id="tf-rep" name="rep"><option value="0">Не повторять</option><option value="5">каждые 5 мин</option><option value="10">каждые 10 мин</option><option value="15">каждые 15 мин</option><option value="20">каждые 20 мин</option><option value="30">каждые 30 мин</option><option value="60">каждый час</option></select></label>
       <label>Если не успел ко времени<select id="tf-dl" name="dl"><option value="none">Можно сделать до конца дня</option><option value="strict">Строгий срок: потом нельзя</option><option value="late">Можно позже за часть баллов</option></select></label>
       <label id="tf-grace-l">Запас после времени, мин<input id="tf-grace" name="grace" type="number" inputmode="numeric" min="0" max="600" value="${t.grace ?? 30}"></label>
@@ -1241,13 +1259,13 @@ function taskForm(id, cat) {
       m.querySelector("#tf-bound").hidden = !t.bound; m.querySelector("#tf-unbound").hidden = t.bound;
       m.querySelector("#tf-dows").hidden = f.mode.value !== "days"; m.querySelector("#tf-skip-l").hidden = f.mode.value !== "days";
       f.times.parentElement.hidden = f.freq.value !== "week";
-      const hasT = !!f.time.value; f.dl.parentElement.hidden = !hasT; m.querySelector("#tf-rep-l").hidden = !hasT || !t.mandatory;
+      const hasT = !!f.time.value; m.querySelector("#tf-time-x").hidden = !hasT; m.querySelector("#tf-time-none").hidden = hasT; f.dl.parentElement.hidden = !hasT; m.querySelector("#tf-rep-l").hidden = !hasT || !t.mandatory;
       m.querySelector("#tf-grace-l").hidden = !hasT || f.dl.value === "none"; m.querySelector("#tf-pct-l").hidden = !hasT || f.dl.value !== "late";
       m.querySelectorAll("[data-k]").forEach(b => b.setAttribute("aria-pressed", String(!!t[b.dataset.k] === (b.dataset.v === "1"))));
     };
     m.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { t[b.dataset.k] = b.dataset.v === "1"; sync(); });
     m.querySelectorAll("[data-dow]").forEach(b => b.onclick = () => { const d = +b.dataset.dow; const i = t.schedule.days.indexOf(d); i >= 0 ? t.schedule.days.splice(i, 1) : t.schedule.days.push(d); b.setAttribute("aria-pressed", String(i < 0)); });
-    f.mode.onchange = sync; f.freq.onchange = sync; f.dl.onchange = sync; f.time.oninput = sync; sync();
+    f.mode.onchange = sync; f.freq.onchange = sync; f.dl.onchange = sync; f.time.oninput = sync; f.time.onchange = sync; m.querySelector("#tf-time-x").onclick = () => { f.time.value = ""; sync(); }; sync();
     const save = () => {
       if (!f.reportValidity()) return;
       if (t.bound && f.mode.value === "days" && !t.schedule.days.length) { m.querySelector("#tf-err").textContent = tr("Выберите хотя бы один день недели."); return; }
@@ -1429,6 +1447,8 @@ document.addEventListener("click", e => {
     if (document.querySelector(".scrim")) closeModal();
     render(); return;
   }
+  if (act === "setSound") { lsSet("fq-sound", id === "classic" ? null : id); beep("alert", id); if (document.querySelector(".scrim")) { closeModal(); toast(`Звук: ${SOUNDS[id].n}`); } render(); return; }
+  if (act === "soundMenu") { modal(`<h2>Звук в приложении</h2>${soundOptions()}${SYS_SOUND_HINT}<div class="btns"><button class="btn ghost" data-act="closeModal">Закрыть</button></div>`); return; }
   if (act === "setTheme") {
     window.FQ_THEME?.set(id);
     if (document.querySelector(".scrim")) { closeModal(); toast(`Тема: ${themeName()}`); }
@@ -1490,7 +1510,7 @@ document.addEventListener("click", e => {
   if (act === "endPreview") { S.preview = null; S.tab = "settings"; S.setPage = "kids"; render(); return; }
   if (act === "avatarEdit") { avatarEditor(); return; }
   if (act === "kidMenu") { modal(`<section class="profile">${avatar(S.user.displayName, S.me?.avatar, "lg edit", `background:${kidColor(kidById(viewingKid()))}`, `data-act="avatarEdit" aria-label="Фото профиля"`, "button")}<span class="t"><b>${esc(S.user.displayName || "")}</b><small>${esc(S.user.email || "")}</small></span></section>
-    <div class="set-list"><button class="set-row" data-act="push"><span class="tile c-green">${ic("bell")}</span><span class="t"><b>Уведомления</b><small>${pushState()}</small></span></button><button class="set-row" data-act="setLang" data-id="${I18N.lang() === "en" ? "ru" : "en"}"><span class="tile c-blue">${ic("globe")}</span><span class="t"><b>Язык</b><small data-noi18n>${I18N.lang() === "en" ? "English → Русский" : "Русский → English"}</small></span></button><button class="set-row" data-act="setTheme" data-id="${({ dark: "light", light: "auto", auto: "dark" })[themeNow()]}"><span class="tile c-violet">${ic(themeIcon())}</span><span class="t"><b>Тема</b><small>${themeName()} → ${(THEMES.find(t => t[0] === ({ dark: "light", light: "auto", auto: "dark" })[themeNow()]) || THEMES[0])[1]}</small></span></button><button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти</b><small>${esc(S.user.email || "")}</small></span></button></div>
+    <div class="set-list"><button class="set-row" data-act="push"><span class="tile c-green">${ic("bell")}</span><span class="t"><b>Уведомления</b><small>${pushState()}</small></span></button><button class="set-row" data-act="setLang" data-id="${I18N.lang() === "en" ? "ru" : "en"}"><span class="tile c-blue">${ic("globe")}</span><span class="t"><b>Язык</b><small data-noi18n>${I18N.lang() === "en" ? "English → Русский" : "Русский → English"}</small></span></button><button class="set-row" data-act="soundMenu"><span class="tile c-gold">${ic("bell")}</span><span class="t"><b>Звук</b><small>${SOUNDS[soundNow()].n}</small></span></button><button class="set-row" data-act="setTheme" data-id="${({ dark: "light", light: "auto", auto: "dark" })[themeNow()]}"><span class="tile c-violet">${ic(themeIcon())}</span><span class="t"><b>Тема</b><small>${themeName()} → ${(THEMES.find(t => t[0] === ({ dark: "light", light: "auto", auto: "dark" })[themeNow()]) || THEMES[0])[1]}</small></span></button><button class="set-row" data-act="signOut"><span class="tile c-gray">${ic("logout")}</span><span class="t"><b>Выйти</b><small>${esc(S.user.email || "")}</small></span></button></div>
     <p class="version">${appIcon(20)} Family Quests · версия ${APP_VERSION}</p>`); return; }
   if (act === "withdraw") { const en = S.data.entries.find(x => x.id === id); if (!canWithdraw(en)) return;
     ask(en.type === "wish" ? `Отменить заявку на «${en.title}»?` : `Отменить «${en.title}»? Дело снова станет невыполненным.`, "Отменить", () => {
