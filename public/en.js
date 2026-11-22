@@ -167,6 +167,7 @@
     "Убрать время": "Clear time", "Без времени — можно сделать в любое время дня": "No time — can be done any time of the day",
     "Звук: Двойной сигнал": "Sound: Double beep", "Звук: Колокольчик": "Sound: Bell", "Звук: Монетка": "Sound: Coin", "Звук: Маримба": "Sound: Marimba", "Звук: Капля": "Sound: Drop", "Звук: Мелодия": "Sound: Chime", "Звук: Без звука (только вибрация)": "Sound: Silent (vibration only)",
     "Прослушать": "Play", "▶ — прослушать, не меняя выбор. Нажмите на название, чтобы выбрать звук.": "▶ plays the sound without changing your choice. Tap a name to select it.",
+    "Звук даже в режиме «вибро» (пока приложение открыто)": "Play sound even in vibrate/silent mode (while the app is open)",
     "Тема оформления": "Appearance", "Тема": "Theme", "Тёмная": "Dark", "Светлая": "Light", "Как в системе": "System",
     "Ночь и золото — как раньше": "Night and gold — the classic look", "Светлый фон, удобно днём": "Light background, easy in daylight",
     "Меняется вместе с настройкой телефона": "Follows your phone's setting",

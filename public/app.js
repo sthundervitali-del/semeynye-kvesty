@@ -176,36 +176,54 @@ const SOUNDS = {
   none: { n: "Без звука (только вибрация)" }
 };
 const soundNow = () => { const v = lsGet("fq-sound"); return SOUNDS[v] ? v : "classic"; };
-/* Звук собирается в WAV и играет через <audio>: так он слышен и в беззвучном режиме iPhone,
-   и во встроенных браузерах, где Web Audio может быть заглушён. */
-const wavCache = {};
-function soundUrl(id, kind) {
-  const key = id + ":" + kind; if (wavCache[key]) return wavCache[key];
-  const s = SOUNDS[id], notes = kind === "good" ? s.good : s.alert, SR = 22050;
-  const dur = Math.max(...notes.map(([, d]) => d)) + s.len + .05, N = Math.ceil(dur * SR), buf = new Float32Array(N);
-  const wave = p => s.wave === "square" ? (p % 1 < .5 ? 1 : -1) : s.wave === "triangle" ? 1 - 4 * Math.abs((p % 1) - .5) : Math.sin(2 * Math.PI * p);
-  notes.forEach(([f, d, f2]) => {
-    const st = Math.floor(d * SR), L = Math.floor(s.len * SR); let ph = 0;
-    for (let k = 0; k < L && st + k < N; k++) {
-      const t = k / L, fr = f2 ? f * Math.pow(f2 / f, t) : f; ph += fr / SR;
-      const env = Math.min(1, k / (SR * .008)) * Math.pow(1 - t, 2.2);
-      buf[st + k] += wave(ph) * env * (s.wave === "square" ? .35 : 1);
-    }
+const loudOn = () => lsGet("fq-loud") !== "0"; // играть как медиа-звук: слышно и в режиме «вибро»/«без звука» на iPhone
+function schedule(ctx, s, kind, base) {
+  (kind === "good" ? s.good : s.alert).forEach(([f, d, f2]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain(), t0 = base + d, v = s.vol || .25;
+    o.type = s.wave; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + s.len);
+    g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + .015); g.gain.exponentialRampToValueAtTime(.0001, t0 + s.len);
+    o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0 + s.len + .02);
   });
-  let peak = 0; for (let k = 0; k < N; k++) peak = Math.max(peak, Math.abs(buf[k]));
-  const g = peak ? .8 / peak : 0, dv = new DataView(new ArrayBuffer(44 + N * 2)), w = (o, str) => [...str].forEach((c, n) => dv.setUint8(o + n, c.charCodeAt(0)));
-  w(0, "RIFF"); dv.setUint32(4, 36 + N * 2, true); w(8, "WAVE"); w(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-  dv.setUint32(24, SR, true); dv.setUint32(28, SR * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, N * 2, true);
-  for (let k = 0; k < N; k++) dv.setInt16(44 + k * 2, Math.max(-1, Math.min(1, buf[k] * g)) * 32767, true);
-  return wavCache[key] = URL.createObjectURL(new Blob([dv], { type: "audio/wav" }));
+}
+/* Готовим звук как WAV-файл: <audio> на iPhone играет и при выключенном звонке, в отличие от Web Audio. */
+const wavCache = {};
+function wavUrl(name, kind) {
+  const key = name + ":" + kind; if (wavCache[key]) return wavCache[key];
+  const s = SOUNDS[name], notes = kind === "good" ? s.good : s.alert;
+  const dur = Math.max(...notes.map(n => n[1])) + s.len + .1, sr = 44100;
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (!OAC) return null;
+  const ctx = new OAC(1, Math.ceil(sr * dur), sr); schedule(ctx, s, kind, 0);
+  return wavCache[key] = new Promise((ok, no) => { const r = ctx.startRendering(); if (r && r.then) r.then(ok, no); else ctx.oncomplete = e => ok(e.renderedBuffer); }).then(buf => {
+    const d = buf.getChannelData(0), n = d.length, b = new DataView(new ArrayBuffer(44 + n * 2));
+    const w = (o, t) => [...t].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
+    w(0, "RIFF"); b.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt "); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+    b.setUint32(24, sr, true); b.setUint32(28, sr * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, "data"); b.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) b.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i])) * 32767, true);
+    return URL.createObjectURL(new Blob([b], { type: "audio/wav" }));
+  });
+}
+let audioEl = null, actx = null;
+function mediaEl() { if (!audioEl) try { audioEl = new Audio(); audioEl.setAttribute("playsinline", ""); } catch (_) {} return audioEl; }
+// iPhone разрешает звук только после касания: при первом касании «разблокируем» плеер беззвучным проигрыванием.
+document.addEventListener("pointerdown", function unlock() {
+  document.removeEventListener("pointerdown", unlock, true);
+  const el = mediaEl(), p = el && wavUrl("classic", "alert"); if (!p) return;
+  p.then(u => { if (!el.src) { el.src = u; el.muted = true; const r = el.play(); if (r && r.then) r.then(() => { el.pause(); el.muted = false; el.currentTime = 0; }, () => { el.muted = false; }); else el.muted = false; } }).catch(() => {});
+}, true);
+function webBeep(s, kind) {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); schedule(actx, s, kind, actx.currentTime); } catch (_) {}
 }
 function beep(kind, force) {
-  const id = force || soundNow();
-  if (SOUNDS[id].alert) try { const au = new Audio(soundUrl(id, kind)); au.volume = 1; const p = au.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+  const name = force || soundNow(), s = SOUNDS[name];
+  if (s.alert) {
+    const el = loudOn() && mediaEl(), p = el && wavUrl(name, kind);
+    if (p) p.then(u => { el.muted = false; el.src = u; el.currentTime = 0; const r = el.play(); if (r && r.catch) r.catch(() => webBeep(s, kind)); }).catch(() => webBeep(s, kind));
+    else webBeep(s, kind);
+  }
   try { navigator.vibrate && navigator.vibrate(kind === "good" ? [60, 40, 60] : [120, 60, 120]); } catch (_) {}
 }
 function soundOptions() {
-  return `<div class="lang-opts">${Object.entries(SOUNDS).map(([c, x]) => `<div class="snd-row"><button class="lang-opt" data-act="setSound" data-id="${c}" aria-pressed="${soundNow() === c}"><span class="flag">${ic(c === "none" ? "minus-circle" : "bell")}</span><span class="t"><b>${x.n}</b></span>${soundNow() === c ? ic("check") : ""}</button>${c === "none" ? `<span class="snd-play"></span>` : `<button class="btn ghost icon snd-play" data-act="playSound" data-id="${c}" aria-label="Прослушать: ${x.n}" title="Прослушать">${ic("play")}</button>`}</div>`).join("")}</div><p class="hint">▶ — прослушать, не меняя выбор. Нажмите на название, чтобы выбрать звук.</p>`;
+  return `<div class="lang-opts">${Object.entries(SOUNDS).map(([c, x]) => `<div class="snd-row"><button class="lang-opt" data-act="setSound" data-id="${c}" aria-pressed="${soundNow() === c}"><span class="flag">${ic(c === "none" ? "minus-circle" : "bell")}</span><span class="t"><b>${x.n}</b></span>${soundNow() === c ? ic("check") : ""}</button>${c === "none" ? `<span class="snd-play"></span>` : `<button class="btn ghost icon snd-play" data-act="playSound" data-id="${c}" aria-label="Прослушать: ${x.n}" title="Прослушать">${ic("play")}</button>`}</div>`).join("")}</div><p class="hint">▶ — прослушать, не меняя выбор. Нажмите на название, чтобы выбрать звук.</p><label class="inline full"><input type="checkbox" data-act="toggleLoud" ${loudOn() ? "checked" : ""}> Звук даже в режиме «вибро» (пока приложение открыто)</label>`;
 }
 const SYS_SOUND_HINT = `<details class="hint"><summary>Звук, когда приложение закрыто</summary><p>Пока приложение открыто, играет выбранный здесь звук. Когда оно закрыто, уведомление показывает телефон, и звук берётся из его настроек — там можно выбрать любой системный.</p><p><b>Android:</b> нажмите и подержите уведомление Family Quests → значок настроек (или «Настройки» → «Приложения» → Family Quests либо Chrome → «Уведомления») → категория уведомлений → «Звук» → выберите мелодию.</p><p><b>iPhone:</b> iOS не даёт менять звук уведомлений веб-приложений — играет стандартный сигнал. Можно включить или выключить звук: «Настройки» → «Уведомления» → Family Quests → «Звуки».</p></details>`;
 function confetti() {
@@ -1461,7 +1479,8 @@ document.addEventListener("click", e => {
     if (document.querySelector(".scrim")) closeModal();
     render(); return;
   }
-  if (act === "playSound") { const b = el; b.classList.add("playing"); beep("alert", id); setTimeout(() => beep("good", id), 900); setTimeout(() => b.classList.remove("playing"), 1900); return; }
+  if (act === "toggleLoud") { lsSet("fq-loud", el.checked ? null : "0"); if (el.checked) beep("alert"); return; }
+  if (act === "playSound") { const b = el; b.classList.add("playing"); beep("alert", id); setTimeout(() => beep("good", id), 1200); setTimeout(() => b.classList.remove("playing"), 2300); return; }
   if (act === "setSound") { lsSet("fq-sound", id === "classic" ? null : id); beep("alert", id); if (document.querySelector(".scrim")) { closeModal(); toast(`Звук: ${SOUNDS[id].n}`); } render(); return; }
   if (act === "soundMenu") { modal(`<h2>Звук в приложении</h2>${soundOptions()}${SYS_SOUND_HINT}<div class="btns"><button class="btn ghost" data-act="closeModal">Закрыть</button></div>`); return; }
   if (act === "setTheme") {
