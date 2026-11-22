@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.19.2", APP_DATE = "22.11.2026";
+const APP_VERSION = "2.19.3", APP_DATE = "22.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -223,7 +223,8 @@ function beep(kind, force) {
   try { navigator.vibrate && navigator.vibrate(kind === "good" ? [60, 40, 60] : [120, 60, 120]); } catch (_) {}
 }
 function soundOptions() {
-  return `<div class="lang-opts">${Object.entries(SOUNDS).map(([c, x]) => `<div class="snd-row"><button class="lang-opt" data-act="setSound" data-id="${c}" aria-pressed="${soundNow() === c}"><span class="flag">${ic(c === "none" ? "minus-circle" : "bell")}</span><span class="t"><b>${x.n}</b></span>${soundNow() === c ? ic("check") : ""}</button>${c === "none" ? `<span class="snd-play"></span>` : `<button class="btn ghost icon snd-play" data-act="playSound" data-id="${c}" aria-label="Прослушать: ${x.n}" title="Прослушать">${ic("play")}</button>`}</div>`).join("")}</div><p class="hint">▶ — прослушать, не меняя выбор. Нажмите на название, чтобы выбрать звук.</p><label class="inline full"><input type="checkbox" data-act="toggleLoud" ${loudOn() ? "checked" : ""}> Звук даже в режиме «вибро» (пока приложение открыто)</label>`;
+  return `<div class="snd-pick"><label class="full">Звук<select id="snd-sel" data-sound-select>${Object.entries(SOUNDS).map(([c, x]) => `<option value="${c}" ${soundNow() === c ? "selected" : ""}>${x.n}</option>`).join("")}</select></label><button type="button" class="btn ghost icon snd-play" data-act="playSound" data-id="" aria-label="Прослушать" title="Прослушать" ${soundNow() === "none" ? "disabled" : ""}>${ic("play")}</button></div>
+    <label class="inline full"><input type="checkbox" data-act="toggleLoud" ${loudOn() ? "checked" : ""}> Звук даже в режиме «вибро» (пока приложение открыто)</label>`;
 }
 const SYS_SOUND_HINT = `<details class="hint"><summary>Звук, когда приложение закрыто</summary><p>Пока приложение открыто, играет выбранный здесь звук. Когда оно закрыто, уведомление показывает телефон, и звук берётся из его настроек — там можно выбрать любой системный.</p><p><b>Android:</b> нажмите и подержите уведомление Family Quests → значок настроек (или «Настройки» → «Приложения» → Family Quests либо Chrome → «Уведомления») → категория уведомлений → «Звук» → выберите мелодию.</p><p><b>iPhone:</b> iOS не даёт менять звук уведомлений веб-приложений — играет стандартный сигнал. Можно включить или выключить звук: «Настройки» → «Уведомления» → Family Quests → «Звуки».</p></details>`;
 function confetti() {
@@ -1467,6 +1468,7 @@ const stripEntry = e => { const { status, dec, value, doc, ...rest } = e; return
 setInterval(() => { if (viewingKid() && S.tab === "today" && !document.querySelector(".scrim")) rerender(); }, 60000);
 
 /* ====================== СОБЫТИЯ ====================== */
+document.addEventListener("change", e => { const sel = e.target.closest?.("[data-sound-select]"); if (sel) { const id = sel.value; lsSet("fq-sound", id === "classic" ? null : id); beep("alert", id); const pb = sel.closest(".snd-pick")?.querySelector(".snd-play"); if (pb) pb.disabled = id === "none"; if (!document.querySelector(".scrim")) render(); return; } });
 document.addEventListener("change", e => { const c = e.target.closest?.("[data-instant]"); if (!c) return; c.checked ? S.instant.add(c.dataset.instant) : S.instant.delete(c.dataset.instant); c.blur(); });
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
@@ -1480,7 +1482,7 @@ document.addEventListener("click", e => {
     render(); return;
   }
   if (act === "toggleLoud") { lsSet("fq-loud", el.checked ? null : "0"); if (el.checked) beep("alert"); return; }
-  if (act === "playSound") { const b = el; b.classList.add("playing"); beep("alert", id); setTimeout(() => beep("good", id), 1200); setTimeout(() => b.classList.remove("playing"), 2300); return; }
+  if (act === "playSound") { const b = el; const id = el.dataset.id || soundNow(); if (!SOUNDS[id].alert) return; b.classList.add("playing"); beep("alert", id); setTimeout(() => beep("good", id), 1200); setTimeout(() => b.classList.remove("playing"), 2300); return; }
   if (act === "setSound") { lsSet("fq-sound", id === "classic" ? null : id); beep("alert", id); if (document.querySelector(".scrim")) { closeModal(); toast(`Звук: ${SOUNDS[id].n}`); } render(); return; }
   if (act === "soundMenu") { modal(`<h2>Звук в приложении</h2>${soundOptions()}${SYS_SOUND_HINT}<div class="btns"><button class="btn ghost" data-act="closeModal">Закрыть</button></div>`); return; }
   if (act === "setTheme") {
