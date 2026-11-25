@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.19.3", APP_DATE = "22.11.2026";
+const APP_VERSION = "2.20.0", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -96,7 +96,7 @@ function starterSet(kids) {
 }
 /* ---------- демо-данные ---------- */
 function demoSeed(store, user) {
-  const kids = [{ id: "k1", name: "Дочка", age: 10, color: "violet" },
+  const kids = [{ id: "k1", name: "Дочка", age: 8, color: "violet" },
                 { id: "k2", name: "Сын", age: 14, color: "teal" }];
   const set = starterSet(kids);
   store.family = { name: "Семья (демо)", createdBy: user.uid, createdAt: Date.now() - 20 * 864e5, kids, ...set };
@@ -242,6 +242,7 @@ function recompute() {
   S.data = F.merge(S.kidlogs, S.plogs, S.cfg);
   backfillSnaps();
   runBank();
+  try { syncBadges(); } catch (e) { console.error(e); }
   // уведомления внутри приложения о новых событиях
   const now = new Map(S.data.entries.map(e => [e.id, e.status + "|" + e.at]));
   if (S.prevStatus) {
@@ -282,6 +283,8 @@ function streak(kid) {
   const days = new Set(S.data.entries.filter(e => e.kid === kid && e.type === "task" && e.status === "ok").map(e => e.day));
   let s = today(); if (!days.has(s)) s = F.addDays(s, -1); let n = 0; while (days.has(s)) { n++; s = F.addDays(s, -1); } return n;
 }
+// Вид экранов ребёнка: «детский» (путь дня, крупно) или обычный. По умолчанию — по возрасту: до 9 лет включительно детский.
+const kidUI = k => k && (k.mode === "kids" || k.mode === "normal") ? k.mode : ((+k?.age || 10) < 10 ? "kids" : "normal");
 const sundayLabel = () => `в воскресенье в ${F.creditTime(S.cfg)}`;
 
 /* ====================== РЕНДЕР ====================== */
@@ -302,16 +305,19 @@ function render() {
   if (!S.me) { app.innerHTML = noAccessScreen(); return; }
   const kidMode = !!viewingKid();
   const tabs = kidMode
-    ? [["today", "check-circle", "Сегодня"], ["cal", "calendar", "Календарь"], ["shop", "gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "piggy", "Копилка"]] : []), ["hist", "history", "История"]]
+    ? (kidUI(kidById(viewingKid())) === "kids"
+      ? [["today", "home", "Путь"], ["shop", "gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "piggy", "Копилка"]] : []), ["badges", "medal", "Значки"]]
+      : [["today", "check-circle", "Сегодня"], ["cal", "calendar", "Календарь"], ["shop", "gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "piggy", "Копилка"]] : []), ["hist", "history", "История"], ["badges", "medal", "Значки"]])
     : [["review", "inbox", "Проверка"], ["cal", "calendar", "Календарь"], ["tasks", "checklist", "Дела"], ["rewards", "gift", "Награды"], ["settings", "sliders", "Настройки"]];
   if (!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
   const pend = pendingList().length;
-  let html = `<nav class="nav" aria-label="Разделы"><div class="nav-in"><div class="nav-logo" aria-hidden="true">${appIcon(40)}</div>${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="ico">${ic(i)}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}${id === "settings" && supportBadge() ? `<span class="badge">${supportBadge()}</span>` : ""}</span><span class="lbl">${n}</span></button>`).join("")}</div></nav><div class="wrap" data-tab="${S.tab}">`;
+  document.documentElement.classList.toggle("kidsui", kidMode && kidUI(kidById(viewingKid())) === "kids");
+  let html = `<nav class="nav n${tabs.length}" aria-label="Разделы"><div class="nav-in"><div class="nav-logo" aria-hidden="true">${appIcon(40)}</div>${tabs.map(([id, i, n]) => `<button data-act="tab" data-id="${id}" ${S.tab === id ? 'aria-current="page"' : ""}><span class="ico">${ic(i)}${id === "review" && pend ? `<span class="badge">${pend}</span>` : ""}${id === "settings" && supportBadge() ? `<span class="badge">${supportBadge()}</span>` : ""}</span><span class="lbl">${n}</span></button>`).join("")}</div></nav><div class="wrap" data-tab="${S.tab}">`;
   html += topBar();
   if (kidMode) {
     const k = kidById(viewingKid());
     if (!k) html += `<div class="empty">Профиль ребёнка не найден. Попросите родителей прислать новый код приглашения.</div>`;
-    else html += ({ today: kidToday, cal: calendarView, shop: kidShop, bank: kidBank, hist: kidHistory })[S.tab](k);
+    else html += ({ today: kidToday, cal: calendarView, shop: kidShop, bank: kidBank, hist: kidHistory, badges: kidBadges })[S.tab](k);
   } else html += ({ review: parentReview, cal: calendarView, tasks: parentTasks, rewards: parentRewards, settings: parentSettings })[S.tab]();
   html += `</div>`;
   app.innerHTML = html;
@@ -394,11 +400,12 @@ const errorScreen = () => `<div class="login"><div class="box"><img class="logo"
 
 /* ====================== РЕБЁНОК ====================== */
 function hero(k) {
-  const a = acct(k.id), L = level(k.id), st = streak(k.id);
-  return `<section class="hero">
-    <div><div class="who">${esc(k.name)} · уровень ${L.lv}</div><div class="rank">${L.rank}</div></div>
-    <div class="bal"><div class="v num">${a.available}</div><div class="l">можно потратить</div></div>
-    <div class="xp"><div class="bar"><i style="width:${Math.round(L.cur / 1.5)}%"></i></div><div class="row num"><span>До уровня ${L.lv + 1}: ещё ${150 - L.cur}</span><span class="streak">${ic("flame", "xs")} ${st} ${plural(st, "день", "дня", "дней")} подряд</span></div></div>
+  const a = acct(k.id), L = level(k.id), st = streak(k.id), pct = Math.min(1, L.cur / 150), C = 2 * Math.PI * 78;
+  return `<section class="hero c">
+    <div class="hero-top"><span class="who">${esc(k.name)} · уровень ${L.lv}</span><span class="streak-pill">${ic("flame", "xs")} ${st} ${plural(st, "день", "дня", "дней")} подряд</span></div>
+    <div class="ring" role="img" aria-label="До уровня ${L.lv + 1}: ещё ${150 - L.cur}"><svg viewBox="0 0 180 180" aria-hidden="true"><circle cx="90" cy="90" r="78" class="ring-bg"/><circle cx="90" cy="90" r="78" class="ring-fg" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 90 90)"/></svg>
+      <div class="ring-in"><div class="v num">${a.available}</div><div class="l">можно потратить</div></div></div>
+    <div class="rank-line"><b>${L.rank}</b> · <span class="num">До уровня ${L.lv + 1}: ещё ${150 - L.cur}</span></div>
     <div class="stats num">
       <span class="stat"><b>+${a.today}</b>сегодня${a.tonight ? `, зачислится в ${F.creditTime(S.cfg)}` : ""}</span>
       ${F.weekly(S.cfg) ? `<span class="stat"><b>${a.locked}</b>копится за неделю, откроется ${sundayLabel()}</span>` : ""}
@@ -430,6 +437,7 @@ function taskRow(t, k, s, st) {
     ${st.status === "redo" ? `<div class="note"><b>Нужна доработка.</b> ${esc(st.entry.dec?.note || "Проверка не прошла. Посмотри ещё раз и пришли новое фото.")}</div>` : ""}</div>`;
 }
 function kidToday(k) {
+  if (kidUI(k) === "kids") return kidPath(k);
   const s = today(), info = F.dayInfo(s, S.cfg);
   const tasks = F.live(S.cfg.tasks).filter(t => t.active !== false && F.forKid(t, k.id));
   const groups = { mb: [], ob: [], mu: [], ou: [] };
@@ -450,6 +458,46 @@ function kidToday(k) {
   if (!any) out += F.live(S.cfg.tasks).some(t => t.active !== false && F.forKid(t, k.id))
     ? `<div class="empty big">${ic("sparkle")}<b>На сегодня дел нет</b><span>Отдыхай!</span></div>`
     : `<div class="empty big">${ic("checklist")}<b>Дел пока нет</b><span>Родители скоро добавят задания — за них ты будешь получать баллы.</span></div>`;
+  return out;
+}
+/* Детский режим: дела дня выстроены «путём». Сделанные — сверху, текущее дело крупно, дальше — остальные. */
+function kidPath(k) {
+  const s = today(), info = F.dayInfo(s, S.cfg), a = acct(k.id), st = streak(k.id);
+  const order = { mb: 0, ob: 1, mu: 2, ou: 3 };
+  const rows = F.live(S.cfg.tasks).filter(t => t.active !== false && F.forKid(t, k.id) && (!t.bound || F.applies(t, s, S.cfg))).map(t => {
+    const ts = F.taskState(t, k.id, s, S.data), dl = F.deadline(t, s, S.cfg);
+    const state = ts.free ? (dl && dl.phase === "closed" ? "closed" : "todo") : ts.status === "redo" ? "redo" : ts.status === "pending" ? "wait" : "done";
+    return { t, ts, dl, state, c: order[F.category(t)] ?? 4 };
+  });
+  // В путь идут дела на сегодня; недельные и «в любое время» — отдельным списком ниже.
+  const extra = rows.filter(r => r.c >= 2 && rows.some(x => x.c < 2));
+  for (const r of extra) rows.splice(rows.indexOf(r), 1);
+  const rank = { done: 0, wait: 1, redo: 2, todo: 3, closed: 4 };
+  rows.sort((x, y) => rank[x.state] - rank[y.state] || x.c - y.c || (x.t.time || "99").localeCompare(y.t.time || "99"));
+  const cur = rows.find(r => r.state === "redo" || r.state === "todo");
+  const left = rows.filter(r => r.state === "redo" || r.state === "todo").length, doneN = rows.filter(r => r.state === "done" || r.state === "wait").length;
+  const X = [16, 92, 32, 128, 52, 112];
+  let out = `<section class="kp-head"><div class="kp-hi"><b>Привет, ${esc(k.name)}!</b><span class="streak-pill">${ic("flame", "xs")} ${st} ${plural(st, "день", "дня", "дней")} подряд</span></div>
+    <div class="kp-coins"><span class="coin">₵</span><span class="num">${a.available}</span></div></section>`;
+  if (info.type === "off" && info.reason !== "weekend") out += `<span class="daychip">${ic("sparkle", "xs")} Сегодня выходной${info.name ? ": " + esc(info.name) : ""}</span>`;
+  if (!rows.length) return out + `<div class="empty big">${ic("sparkle")}<b>На сегодня дел нет</b><span>Отдыхай!</span></div>`;
+  out += `<div class="group-h kp-title"><h2>Путь дня</h2><span class="hint num">${doneN} из ${rows.length}</span></div><div class="kpath">`;
+  rows.forEach((r, i) => {
+    const { t, dl, state } = r, x = F.mult(S.cfg, s, t.id), late = dl && dl.phase === "late" && state === "todo";
+    const pts = late ? Math.round(t.pts * x * dl.pct / 100) : t.pts * x, isCur = r === cur;
+    const act = state === "todo" || state === "redo" ? `data-act="done" data-id="${t.id}"${state === "redo" ? ` data-entry="${r.ts.entry.id}"` : ""}` : "";
+    const dot = state === "done" ? ic("check") : state === "wait" ? ic("clock") : state === "closed" ? ic("x") : isCur ? ic(CATS[t.cat]?.ic || "star") : `<span class="num">+${pts}</span>`;
+    const sub = state === "wait" ? "Проверяется…" : state === "redo" ? "Нужно исправить" : state === "closed" ? "Время вышло" : state === "done" ? "Принято" :
+      [`+${pts}`, t.bound && t.time ? (dl && dl.phase === "open" ? `до ${fmtTime(dl.deadline)}` : esc(t.time)) : "", late ? "с опозданием" : "", t.photo ? "с фото" : ""].filter(Boolean).join(" · ");
+    if (i) out += `<div class="kp-link" style="--x:${X[(i - 1) % X.length]}px"></div>`;
+    out += `<div class="kp-node s-${state}${isCur ? " cur" : ""}${t.mandatory ? " must" : ""}" style="--x:${X[i % X.length]}px">
+      ${act ? `<button class="kp-dot" ${act} aria-label="${esc(t.title)}: готово">${dot}</button>` : `<span class="kp-dot">${dot}</span>`}
+      <div class="kp-lbl"><b>${esc(t.title)}</b><small>${sub}</small>${isCur ? `<button class="btn go" ${act}>${state === "redo" ? "Исправил!" : late ? "Сделал с опозданием" : "Готово!"}</button>` : ""}</div></div>`;
+    if (state === "redo" && r.ts.entry?.dec?.note) out += `<div class="note kp-note"><b>Нужна доработка.</b> ${esc(r.ts.entry.dec.note)}</div>`;
+  });
+  out += `</div>`;
+  if (!left) out += `<div class="empty big">${ic("sparkle")}<b>Все дела на сегодня сделаны!</b><span>Ты молодец.</span></div>`;
+  if (extra.length) out += `<section class="card"><div class="group-h"><h2>Ещё можно сделать</h2><span class="hint">за дополнительные баллы</span></div><div class="group">${extra.map(r => { if (r.state === "closed") r.ts.closed = true; return taskRow(r.t, k, s, r.ts); }).join("")}</div></section>`;
   return out;
 }
 function kidShop(k) {
@@ -610,6 +658,120 @@ function runBank() {
   const go = () => { for (const [d, map] of Object.entries(by)) S.be.putSnaps(d, map).catch(() => {}); };
   S.be.demo ? setTimeout(go, 1500) : go();
 }
+/* ====================== ЗНАЧКИ ====================== */
+// id: [название, условие, группа, металл, число на плашке, значок (иначе — значок группы)]
+const BADGE_UI = {
+  streak3: ["Разгон", "3 дня подряд", "streak", "bronze", "3"], streak7: ["Неделя", "7 дней подряд", "streak", "silver", "7"],
+  streak14: ["Две недели", "14 дней подряд", "streak", "gold", "14"], streak30: ["Месяц", "30 дней подряд", "streak", "plat", "30"],
+  streak100: ["Стодневка", "100 дней подряд", "streak", "legend", "100"],
+  home10: ["Помощник", "10 дел по дому", "home", "bronze", "10"], home50: ["Хозяин", "50 дел по дому", "home", "silver", "50"], home150: ["Мастер дома", "150 дел по дому", "home", "gold", "150"],
+  study10: ["Ученик", "10 дел по учёбе", "study", "bronze", "10"], study50: ["Отличник", "50 дел по учёбе", "study", "silver", "50"], study150: ["Профессор", "150 дел по учёбе", "study", "gold", "150"],
+  use10: ["Полезный", "10 полезных дел", "use", "bronze", "10"], use50: ["Мастер на все руки", "50 полезных дел", "use", "silver", "50"],
+  first1: ["Первое дело", "Первое принятое дело", "total", "bronze", "", "check"], total100: ["Сотня", "100 дел всего", "total", "silver", "100"], total500: ["Пятисотня", "500 дел всего", "total", "gold", "500"],
+  ideal1: ["Идеальный день", "Все обязательные дела дня", "ideal", "silver", ""], ideal7: ["Идеальная неделя", "7 идеальных дней подряд", "ideal", "gold", "7"],
+  reward1: ["Первая награда", "Первый обмен баллов на награду", "money", "bronze", "", "gift"], deposit1: ["Копилка", "Первый вклад", "money", "silver", "", "piggy"],
+  patience: ["Терпение", "Вклад вернулся с процентами", "money", "gold", "", "hourglass"], gift1: ["Щедрое сердце", "Подарил баллы брату или сестре", "money", "silver", "", "heart"],
+  save500: ["Большая цель", "500 баллов за всё время", "money", "silver", "500", "target"], save1000: ["Тысячник", "1000 баллов за всё время", "money", "gold", "1000", "target"],
+  save1500: ["Сокровищница", "1500 баллов за всё время", "money", "plat", "1500", "target"],
+  level5: ["Герой семьи", "Достигнут 5-й уровень", "level", "gold", "5"]
+};
+const B_ICON = {
+  flame: "M12 3c1 3.5 5 5.5 5 10.5a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 0 1.7.8 2.6 1.6 2.6 0-3.2.9-5.6.9-8.1z", house: "M3.5 11 12 4l8.5 7M5.5 9.5V20h13V9.5M10 20v-5h4v5",
+  book: "M4 19.5V5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2zM4 19.5A2 2 0 0 0 6 21h13M8 7h7", star: "M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z",
+  check: "M5 12.5l4.5 4.5L19 7.5", checks: "M2.5 13l4 4 7-9M10.5 15.5l1.5 1.5 9-10",
+  sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
+  gift: "M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8c-2-4-6-4-6-1s6 1 6 1 6 2 6-1-4-3-6 1z", piggy: "M19 10c0-3-3-5-7-5S4 7 4 10c0 2 1 3 2 4v3h3v-2h4v2h3v-3c1-.5 2-1 3-1v-3zM15 9h.01M10 5.5l-.5-2",
+  hourglass: "M6 3h12M6 21h12M7 3c0 5 10 6 10 9s-10 4-10 9M17 3c0 5-10 6-10 9s10 4 10 9", heart: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z",
+  target: "M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16zM12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8zM12 12h.01", crown: "M3 8l4.5 4 4.5-7 4.5 7 4.5-4-2 11H5z"
+};
+const B_GRP = { streak: ["circle", "#FF9A5A", "#E2412A", "flame"], home: ["hex", "#3FE0C0", "#0E8F7A", "house"], study: ["shield", "#B49BFF", "#5B3FD6", "book"], use: ["oct", "#6CB8FF", "#1F5FD9", "star"],
+  total: ["rosette", "#9BE15D", "#2E8B2A", "checks"], ideal: ["diamond", "#FF8CC0", "#C9286F", "sparkle"], money: ["coin", "#FFD36B", "#D98A00", "gift"], level: ["burst", "#6F7DFF", "#262C8F", "crown"] };
+const B_TIER = { bronze: ["#7A4A1F", "#F0B985", "#8C5A2B", "#3A2008", "Бронза"], silver: ["#6B7385", "#F7F9FC", "#7C8496", "#1F2533", "Серебро"], gold: ["#9A6A0C", "#FFE89A", "#A87414", "#3A2600", "Золото"],
+  plat: ["#4E5BC4", "#EEF0FF", "#6E7BD9", "#1A1F5C", "Платина"], legend: ["#E0467C", "#FFE07A", "#2EC5E8", "#2A1033", "Легенда"] };
+const B_SHAPE = (() => {
+  const P = pts => pts.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+  const reg = (n, r, rot) => Array.from({ length: n }, (_, i) => { const a = (rot + i * 360 / n) * Math.PI / 180; return [50 + r * Math.cos(a), 50 + r * Math.sin(a)]; });
+  const star = (n, r1, r2, rot) => Array.from({ length: n * 2 }, (_, i) => { const r = i % 2 ? r2 : r1, a = (rot + i * 180 / n) * Math.PI / 180; return [50 + r * Math.cos(a), 50 + r * Math.sin(a)]; });
+  const sh = (pts, k) => pts.map(p => [50 + (p[0] - 50) * k, 50 + (p[1] - 50) * k]);
+  const shield = [[12, 10], [88, 10], [88, 50], [77, 72], [50, 93], [23, 72], [12, 50]];
+  const o = { circle: [reg(64, 48, 0), reg(64, 39, 0)], hex: [reg(6, 48, -90), sh(reg(6, 48, -90), .8)], oct: [reg(8, 48, -112.5), sh(reg(8, 48, -112.5), .8)],
+    diamond: [reg(4, 49, -90), sh(reg(4, 49, -90), .76)], shield: [shield, sh(shield, .8)], rosette: [star(14, 48, 43.5, -90), reg(48, 37, 0)],
+    coin: [star(24, 48, 45.5, -90), reg(48, 38, 0)], burst: [star(8, 49, 39, -90), reg(48, 33, 0)] };
+  for (const k in o) o[k] = o[k].map(P); return o;
+})();
+let badgeSeq = 0;
+function badgeSvg(id, size, locked) {
+  const b = BADGE_UI[id]; if (!b) return "";
+  const [, , g, t, num, ico] = b, G = B_GRP[g], T = B_TIER[t], [outer, inner] = B_SHAPE[G[0]];
+  const u = "b" + (++badgeSeq), s = G[0] === "burst" || G[0] === "diamond" ? 1.35 : 1.55, half = 12 * s, cy = num ? 44 : 50, path = B_ICON[ico || G[3]];
+  return `<svg class="badge-svg${locked ? " locked" : ""}" width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true"><defs>
+    <linearGradient id="${u}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${T[0]}"/><stop offset=".45" stop-color="${T[1]}"/><stop offset="1" stop-color="${T[2]}"/></linearGradient>
+    <linearGradient id="${u}f" x1=".2" y1="0" x2=".8" y2="1"><stop offset="0" stop-color="${G[1]}"/><stop offset="1" stop-color="${G[2]}"/></linearGradient></defs>
+    <ellipse cx="50" cy="96.5" rx="30" ry="2.6" fill="#000" opacity=".25"/><polygon points="${outer}" fill="url(#${u}r)"/><polygon points="${inner}" fill="url(#${u}f)" stroke="#000" stroke-opacity=".18" stroke-width="1.2"/>
+    <ellipse cx="50" cy="${G[0] === "shield" ? 26 : 30}" rx="${G[0] === "diamond" ? 16 : 24}" ry="9" fill="#fff" opacity=".16"/>
+    <path d="${path}" transform="translate(${50 - half} ${cy - half + 1.2}) scale(${s})" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${path}" transform="translate(${50 - half} ${cy - half}) scale(${s})" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${num ? `<rect x="31" y="70" width="38" height="17" rx="8.5" fill="url(#${u}r)" stroke="#000" stroke-opacity=".15" stroke-width=".8"/><text x="50" y="82.2" text-anchor="middle" font-family="system-ui,sans-serif" font-size="${num.length > 3 ? 9.5 : 11}" font-weight="800" fill="${T[3]}">${num}</text>` : ""}</svg>`;
+}
+// Полученные значки: сохранённые (не пропадают) плюс посчитанные сейчас. got: { id: "YYYY-MM-DD" }.
+function badgeState(kid) {
+  const calc = F.badges(kid, S.data, S.cfg, today());
+  const got = {}, stored = {};
+  for (const d of S.kidlogs) if (d.kid === kid || (d.id || "").startsWith(kid + "_")) for (const [id, ts] of Object.entries(d.b || {})) if (BADGE_UI[id] && +ts > 0) stored[id] = Math.min(stored[id] || Infinity, +ts);
+  for (const id of Object.keys(BADGE_UI)) { if (calc.got[id]) got[id] = calc.got[id]; else if (stored[id]) got[id] = F.dayKey(new Date(stored[id])); }
+  return { got, stored, prog: calc.prog, n: Object.keys(got).length, total: Object.keys(BADGE_UI).length };
+}
+// Записываем новые значки, чтобы они не пропали, если родитель потом отменит решение. Пишет сам ребёнок или родитель.
+const badgeWritten = new Set();
+function syncBadges() {
+  if (!S.be || !S.me || !S.cfg) return;
+  for (const k of kidsList()) {
+    if (!isParent() && S.me.kidId !== k.id) continue;
+    const st = badgeState(k.id), add = {};
+    for (const id of Object.keys(st.got)) if (!st.stored[id] && !badgeWritten.has(k.id + id)) { add[id] = Date.now(); badgeWritten.add(k.id + id); }
+    if (Object.keys(add).length) S.be.putBadges(k.id, F.monthKey(), add).catch(() => { for (const id in add) badgeWritten.delete(k.id + id); });
+  }
+}
+function badgeProgText(id, st) {
+  const p = st.prog[id], g = BADGE_UI[id][2];
+  if (!p) return { deposit1: "сделай вклад", patience: "дождись конца вклада", reward1: "обменяй баллы", gift1: "подари баллы" }[id] || "";
+  if (id === "level5") return `уровень ${level(viewingKid() || "").lv} из 5`;
+  if (g === "streak") return `ещё ${p[1] - p[0]} ${plural(p[1] - p[0], "день", "дня", "дней")}`;
+  return `${p[0]} из ${p[1]}`;
+}
+function kidBadges(k) {
+  const st = badgeState(k.id), ids = Object.keys(BADGE_UI);
+  const got = ids.filter(id => st.got[id]).sort((a, b) => st.got[b].localeCompare(st.got[a]));
+  const rest = ids.filter(id => !st.got[id]).sort((a, b) => { const pa = st.prog[a], pb = st.prog[b]; return (pb ? pb[0] / pb[1] : 0) - (pa ? pa[0] / pa[1] : 0); });
+  const cell = (id, on) => `<button class="bcell" data-act="badgeInfo" data-id="${id}">${badgeSvg(id, 92, !on)}<b>${BADGE_UI[id][0]}</b><small class="${on ? "" : "next"}">${on ? dShort(F.parseDay(st.got[id]).getTime()) : badgeProgText(id, st)}</small></button>`;
+  return `<section class="card bcoll"><div class="group-h"><h2>${ic("medal", "h")} Коллекция</h2><span class="hint num">${st.n} из ${st.total}</span></div>
+    <div class="bbar"><i style="width:${Math.round(st.n / st.total * 100)}%"></i></div>
+    ${got.length ? `<h3>Получено</h3><div class="bgrid">${got.map(id => cell(id, true)).join("")}</div>` : `<p class="hint">Пока ни одного значка. Выполни первое дело — и получишь «Первое дело»!</p>`}
+    ${rest.length ? `<h3>Ещё впереди</h3><div class="bgrid">${rest.map(id => cell(id, false)).join("")}</div>` : ""}</section>`;
+}
+function badgeModal(id, kid, fresh) {
+  const st = badgeState(kid), b = BADGE_UI[id], on = !!st.got[id];
+  modal(`<div class="bnew">${fresh ? `<div class="bnew-t">Новый значок!</div>` : ""}<div class="bnew-ic">${badgeSvg(id, fresh ? 200 : 170, !on)}</div><h2>${b[0]}</h2><p class="hint">${b[1]}</p>
+    <span class="pill ${on ? "ok" : "wait"}">${on ? `${B_TIER[b[3]][4]} · ${dShort(F.parseDay(st.got[id]).getTime())}` : badgeProgText(id, st)}</span>
+    ${fresh ? `<p class="hint num">${st.n} из ${st.total} в коллекции</p>` : ""}<div class="btns" style="justify-content:center"><button class="btn go big" id="b-ok">${fresh ? "Ура!" : "Закрыть"}</button>${fresh ? `<button class="btn ghost" id="b-all">Смотреть коллекцию</button>` : ""}</div></div>`,
+    m => { if (fresh) { confetti(); beep("good"); } m.querySelector("#b-ok").onclick = () => { closeModal(); if (fresh) setTimeout(maybeShowGift, 300); }; const all = m.querySelector("#b-all"); if (all) all.onclick = () => { closeModal(); S.tab = "badges"; render(); }; }, "gift");
+}
+// Поздравление с новым значком — только на устройстве самого ребёнка. При первом запуске уже полученные не показываем.
+function maybeShowBadge() {
+  const kid = viewingKid(); if (!kid || isParent() || document.querySelector(".scrim")) return;
+  const seen = new Set(S.me?.seen || []), st = badgeState(kid);
+  const mark = ids => { S.me.seen = [...(S.me.seen || []), ...ids]; S.be.updateMember(S.user.uid, { seen: S.me.seen }).catch(fail); };
+  if (!seen.has("b:init")) {
+    const ids = Object.keys(st.got); mark(["b:init", ...ids.map(id => "b:" + id)]);
+    if (ids.length) { const top = ids.sort((x, y) => st.got[y].localeCompare(st.got[x]))[0];
+      modal(`<div class="bnew"><div class="bnew-t">Новое в приложении</div><div class="bnew-ic">${badgeSvg(top, 170)}</div><h2>Коллекция значков</h2><p class="hint">Значки дают за серии дней, дела и накопленные баллы. У тебя уже <b class="num">${st.n} из ${st.total}</b>!</p><div class="btns" style="justify-content:center"><button class="btn go big" id="b-all">Смотреть коллекцию</button><button class="btn ghost" id="b-ok">Позже</button></div></div>`,
+        m => { confetti(); m.querySelector("#b-ok").onclick = () => closeModal(); m.querySelector("#b-all").onclick = () => { closeModal(); S.tab = "badges"; render(); }; }, "gift"); }
+    return;
+  }
+  const id = Object.keys(st.got).find(x => !seen.has("b:" + x)); if (!id) return;
+  mark(["b:" + id]); badgeModal(id, kid, true);
+}
+
 function maybeShowGift() {
   if (document.querySelector(".scrim")) return;
   const kid = viewingKid(); if (!kid || isParent()) return;
@@ -635,7 +797,7 @@ function maybeShowGift() {
     return;
   }
   const g = S.data.gifts.find(x => x.kid === kid && x.kind === "gift" && !seen.has(x.id));
-  if (!g) return;
+  if (!g) return maybeShowBadge();
   modal(`<div class="gift-ic">${ic("gift")}</div><h2>Подарок от родителей!</h2><div class="amt num">+${ptsW(g.pts)}</div>${g.msg ? `<div class="msg">${esc(g.msg)}</div>` : ""}<p class="hint">Баллы уже на счету — их можно тратить.</p><div class="btns" style="justify-content:center"><button class="btn go big" id="gift-ok">Спасибо!</button></div>`,
     m => { confetti(); beep("good"); m.querySelector("#gift-ok").onclick = () => { closeModal(); S.me.seen = [...(S.me.seen || []), g.id]; S.be.updateMember(S.user.uid, { seen: S.me.seen }).catch(fail); setTimeout(maybeShowGift, 300); }; }, "gift");
 }
@@ -720,7 +882,7 @@ function startCard() {
 }
 function parentReview() {
   const pend = pendingList().sort((a, b) => a.at - b.at);
-  let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending; return `<button class="ks ks-btn" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">${F.weekly(S.cfg) ? `копится ${a.locked} · ` : ""}сегодня +${a.today} · ${ic("flame", "xs")} ${streak(k.id)}${dep ? ` · на депозитах ${dep}` : ""}</small><small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
+  let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending; return `<button class="ks ks-btn" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">${F.weekly(S.cfg) ? `копится ${a.locked} · ` : ""}сегодня +${a.today} · ${ic("flame", "xs")} ${streak(k.id)} · ${ic("medal", "xs")} ${badgeState(k.id).n}${dep ? ` · на депозитах ${dep}` : ""}</small><small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
   out += `<section class="card"><h2>${ic("inbox", "h")} Ждут проверки${pend.length ? " · " + pend.length : ""}</h2>`;
   if (!pend.length) out += `<div class="empty">${ic("check-circle")}Всё проверено. Новых заявок нет.</div>`;
   else out += pend.map(e => {
@@ -1208,7 +1370,9 @@ function settingsPage(p) {
       <div class="full kid-head">${avatar(k.name, kidMember(k)?.avatar, "sm", `background:${kidColor(k)}`)}<b>${esc(k.name)}</b><button type="button" class="btn sm ghost" data-act="preview" data-id="${k.id}">Глазами ребёнка</button><button type="button" class="btn sm ghost icon danger" data-act="delKid" data-id="${k.id}" aria-label="Удалить ребёнка: ${esc(k.name)}">${ic("trash")}</button></div>
       <label>Имя<input id="kn-${k.id}" name="n-${k.id}" value="${esc(k.name)}" required></label>
       <label>Возраст<input id="ka-${k.id}" name="a-${k.id}" type="number" inputmode="numeric" min="3" max="18" value="${k.age || ""}"></label>
+      <label class="full">Вид для ребёнка<select id="km-${k.id}" name="m-${k.id}"><option value="auto" ${!k.mode || k.mode === "auto" ? "selected" : ""}>По возрасту (сейчас: ${kidUI({ age: k.age }) === "kids" ? "детский" : "обычный"})</option><option value="kids" ${k.mode === "kids" ? "selected" : ""}>Детский — путь дня, крупно</option><option value="normal" ${k.mode === "normal" ? "selected" : ""}>Обычный</option></select></label>
       <label>Цвет<select id="kc-${k.id}" name="c-${k.id}">${Object.keys(COLORS).map(c => `<option value="${c}" ${k.color === c ? "selected" : ""}>${{ violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой" }[c]}</option>`).join("")}</select></label>`).join("")}
+      <p class="hint full">«Детский» вид — для младших: дела дня выстроены путём, кнопки крупнее, меньше разделов. «По возрасту» — детский до 9 лет включительно. Дела, баллы и награды в обоих видах общие. Сам ребёнок вид не переключает.</p>
       <div class="full btnrow"><button class="btn go">Сохранить</button><button type="button" class="btn ghost" data-act="addKid">${ic("plus")} Добавить ребёнка</button></div></form></section>`;
   if (p === "points") { const wk = F.weekly(S.cfg); return head("Баллы") + `<section class="card"><form class="grid" data-form="set-points">
       <fieldset class="opts"><legend>Когда баллы можно тратить</legend>
@@ -1481,6 +1645,7 @@ document.addEventListener("click", e => {
     if (document.querySelector(".scrim")) closeModal();
     render(); return;
   }
+  if (act === "badgeInfo") { const kid = viewingKid() || el.dataset.kid; if (kid && BADGE_UI[id]) badgeModal(id, kid, false); return; }
   if (act === "toggleLoud") { lsSet("fq-loud", el.checked ? null : "0"); if (el.checked) beep("alert"); return; }
   if (act === "playSound") { const b = el; const id = el.dataset.id || soundNow(); if (!SOUNDS[id].alert) return; b.classList.add("playing"); beep("alert", id); setTimeout(() => beep("good", id), 1200); setTimeout(() => b.classList.remove("playing"), 2300); return; }
   if (act === "setSound") { lsSet("fq-sound", id === "classic" ? null : id); beep("alert", id); if (document.querySelector(".scrim")) { closeModal(); toast(`Звук: ${SOUNDS[id].n}`); } render(); return; }
@@ -1616,7 +1781,7 @@ document.addEventListener("submit", e => {
     S.be.putGift(kid + "_" + F.monthKey(), g).then(() => { toast(kind === "gift" ? `Подарок отправлен: +${g.pts}` : "Готово"); f.reset(); }).catch(fail); return;
   }
   if (kind === "kids") {
-    const kids = kidsList().map(k => ({ ...k, name: f["n-" + k.id].value.trim() || k.name, age: parseInt(f["a-" + k.id].value) || k.age, color: f["c-" + k.id].value }));
+    const kids = kidsList().map(k => ({ ...k, name: f["n-" + k.id].value.trim() || k.name, age: parseInt(f["a-" + k.id].value) || k.age, color: f["c-" + k.id].value, mode: ["kids", "normal"].includes(f["m-" + k.id]?.value) ? f["m-" + k.id].value : "auto" }));
     S.be.setFamily({ kids }).then(() => toast("Сохранено")).catch(fail); return;
   }
   const saved = () => toast("Сохранено");

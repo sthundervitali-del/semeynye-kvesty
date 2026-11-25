@@ -361,13 +361,87 @@ var FQ = (function () {
     return { day: s, info: dayInfo(s, cfg), pts: pts, done: done, planned: planned, missed: missed, gifts: gifts };
   }
 
+  /* ---------- значки (коллекция) ----------
+     Считаются по истории: что получено и когда (день, когда условие выполнилось впервые), и прогресс к остальным. */
+  var BADGES = [
+    ["streak3", "streak", 3], ["streak7", "streak", 7], ["streak14", "streak", 14], ["streak30", "streak", 30], ["streak100", "streak", 100],
+    ["home10", "home", 10], ["home50", "home", 50], ["home150", "home", 150],
+    ["study10", "study", 10], ["study50", "study", 50], ["study150", "study", 150],
+    ["use10", "other", 10], ["use50", "other", 50],
+    ["first1", "all", 1], ["total100", "all", 100], ["total500", "all", 500],
+    ["ideal1", "ideal", 1], ["ideal7", "idealrun", 7],
+    ["reward1", "wish", 1], ["deposit1", "dep", 1], ["patience", "matured", 1], ["gift1", "xfer", 1],
+    ["save500", "sum", 500], ["save1000", "sum", 1000], ["save1500", "sum", 1500],
+    ["level5", "sum", 600]
+  ];
+  function badges(kid, data, cfg, todayS, now) {
+    now = now || Date.now(); todayS = todayS || dayKey(new Date(now));
+    var got = {}, val = {};
+    function hit(id, day) { if (!got[id]) got[id] = day; }
+    var tasksCfg = (cfg && cfg.tasks) || {};
+    var ok = data.entries.filter(function (e) { return e.kid === kid && e.type === "task" && e.status === "ok"; })
+      .sort(function (a, b) { return a.day < b.day ? -1 : a.day > b.day ? 1 : a.at - b.at; });
+    var cnt = { all: 0, home: 0, study: 0, other: 0 }, sum = 0;
+    ok.forEach(function (e) {
+      var t = tasksCfg[e.ref], cat = t && (t.cat === "home" || t.cat === "study") ? t.cat : "other";
+      cnt.all++; cnt[cat]++; sum += e.value;
+      BADGES.forEach(function (b) {
+        if (b[1] === cat || b[1] === "all") { if (cnt[b[1]] >= b[2]) hit(b[0], e.day); }
+        else if (b[1] === "sum" && sum >= b[2]) hit(b[0], e.day);
+      });
+    });
+    val.all = cnt.all; val.home = cnt.home; val.study = cnt.study; val.other = cnt.other; val.sum = sum;
+    // Серии: дни подряд, когда принято хотя бы одно дело.
+    var days = [], seen = {};
+    ok.forEach(function (e) { if (!seen[e.day]) { seen[e.day] = 1; days.push(e.day); } });
+    var run = 0, prev = "";
+    days.forEach(function (d) {
+      run = prev && addDays(prev, 1) === d ? run + 1 : 1; prev = d;
+      BADGES.forEach(function (b) { if (b[1] === "streak" && run >= b[2]) hit(b[0], d); });
+    });
+    var s = todayS; if (!seen[s]) s = addDays(s, -1); var cur = 0; while (seen[s]) { cur++; s = addDays(s, -1); }
+    val.streak = cur;
+    // Идеальные дни: выполнены все обязательные дела дня, привязанные к дням. Дни без таких дел серию не прерывают.
+    var kidObj = ((cfg && cfg.kids) || []).filter(function (k) { return k.id === kid; })[0];
+    var start = cfg && cfg.createdAt ? dayKey(new Date(cfg.createdAt)) : (days[0] || todayS);
+    if (kidObj && kidObj.since && kidObj.since > start) start = kidObj.since;
+    if (days[0] && days[0] > start) start = days[0];
+    var must = live(tasksCfg).filter(function (t) { return t.bound && t.mandatory && t.active !== false && forKid(t, kid); });
+    var okBy = {}; ok.forEach(function (e) { okBy[e.day + "/" + e.ref] = 1; });
+    var irun = 0, ideal = 0, guard = 0;
+    for (var d = start; d && d <= todayS && guard < 4000; d = addDays(d, 1), guard++) {
+      var plan = must.filter(function (t) { return (!t.since || d >= t.since) && applies(t, d, cfg); });
+      if (!plan.length) continue;
+      var all = plan.every(function (t) { return okBy[d + "/" + t.id]; });
+      if (all) { ideal++; irun++; hit("ideal1", d); if (irun >= 7) hit("ideal7", d); }
+      else if (d < todayS) irun = 0;
+    }
+    val.ideal = ideal; val.idealrun = irun;
+    // Баллы и награды.
+    data.entries.forEach(function (e) {
+      if (e.kid !== kid) return;
+      if (e.type === "wish" && e.status === "ok") hit("reward1", e.day);
+      if (e.type === "xfer" && e.status === "ok") hit("gift1", e.day);
+      if (e.type === "dep" && e.status === "ok") {
+        hit("deposit1", e.day);
+        if (depState(e, now) === "matured" && e.dep && e.dep.matureAt) hit("patience", dayKey(new Date(e.dep.matureAt)));
+      }
+    });
+    var prog = {};
+    BADGES.forEach(function (b) {
+      var have = b[1] === "streak" ? cur : b[1] === "idealrun" ? irun : b[1] === "ideal" ? ideal : val[b[1]];
+      prog[b[0]] = typeof have === "number" ? [Math.min(have, b[2]), b[2]] : null;
+    });
+    return { got: got, prog: prog, val: val };
+  }
+
   return {
     snapshot: snapshot, cleanEntry: cleanEntry, bankActions: bankActions, ledger: ledger, depState: depState, depPlans: depPlans, interestOf: interestOf, DAY_MS: DAY_MS,
     pad: pad, dayKey: dayKey, monthKey: monthKey, parseDay: parseDay, addDays: addDays, isoDow: isoDow,
     weekStart: weekStart, weekEnd: weekEnd, atTime: atTime, orthodoxEaster: orthodoxEaster, radunitsa: radunitsa,
     dayInfo: dayInfo, category: category, CATEGORY_NAMES: CATEGORY_NAMES, forKid: forKid, live: live, applies: applies,
     mult: mult, deadline: deadline, merge: merge, creditAt: creditAt, activeAt: activeAt, creditTime: creditTime, weekly: weekly, isInstant: isInstant, account: account,
-    taskState: taskState, daySummary: daySummary, isGiftTo: isGiftTo, xferOn: xferOn
+    taskState: taskState, daySummary: daySummary, isGiftTo: isGiftTo, xferOn: xferOn, BADGES: BADGES, badges: badges
   };
 })();
 if (typeof module !== "undefined") module.exports = FQ;

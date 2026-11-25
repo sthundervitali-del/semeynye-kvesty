@@ -568,3 +568,74 @@ details.hint p{margin-top:8px}
 .snd-pick label{flex:1;min-width:0}
 .snd-pick .snd-play{width:48px;min-height:48px;height:48px}
 .snd-play:disabled{opacity:.35}
+/* ---------- v2.20: вариант C — кольцо баланса, путь дня, значки, плавающее меню ---------- */
+.hero.c{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:16px 16px 18px}
+.hero.c::after{right:auto;left:50%;top:10px;transform:translateX(-50%);width:260px;height:260px}
+.hero-top{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;position:relative;z-index:1}
+.streak-pill{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:800;color:var(--gold-t);background:color-mix(in srgb,var(--gold) 14%,transparent);border:1px solid color-mix(in srgb,var(--gold) 30%,transparent);border-radius:99px;padding:4px 10px;white-space:nowrap}
+.ring{position:relative;width:180px;height:180px;z-index:1}
+.ring svg{width:100%;height:100%}
+.ring-bg{fill:none;stroke:color-mix(in srgb,var(--ink) 10%,transparent);stroke-width:13}
+.ring-fg{fill:none;stroke:var(--gold);stroke-width:13;stroke-linecap:round;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--gold) 45%,transparent))}
+.ring-in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-in .v{font-family:var(--display);font-size:46px;font-weight:700;line-height:1;color:var(--ink)}
+.ring-in .l{font-size:12px;color:var(--muted);margin-top:4px}
+.rank-line{font-size:13px;color:var(--muted);position:relative;z-index:1}
+.rank-line b{color:var(--gold-t)}
+.hero.c .stats{justify-content:center;position:relative;z-index:1}
+/* Путь дня */
+.kp-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.kp-hi{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.kp-hi b{font-family:var(--display);font-size:22px;line-height:1.2}
+.kp-coins{display:flex;align-items:center;gap:8px;background:var(--gold-soft);border:1px solid color-mix(in srgb,var(--gold) 40%,transparent);border-radius:99px;padding:5px 14px 5px 5px;font-family:var(--display);font-size:22px;font-weight:700;color:var(--gold-t)}
+.kp-coins .coin{width:32px;height:32px;border-radius:50%;background:var(--gold);color:#2A1B00;display:grid;place-items:center;font-size:16px;font-weight:800}
+.kp-title{margin-top:4px}
+.kpath{display:flex;flex-direction:column;padding:4px 0 8px}
+.kp-node{display:flex;align-items:center;gap:12px;padding-left:var(--x)}
+.kp-link{height:18px;margin-left:calc(var(--x) + 29px);border-left:4px dotted var(--line-2)}
+.kp-dot{flex:none;width:62px;height:62px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line-2);background:var(--surface-2);color:var(--muted);font-family:var(--display);font-weight:700;font-size:15px;padding:0;box-shadow:0 5px 0 color-mix(in srgb,var(--ink) 10%,transparent)}
+.kp-dot .i{width:28px;height:28px}
+button.kp-dot{cursor:pointer}
+.kp-node.s-done .kp-dot{background:var(--home);border-color:transparent;color:#05201C;box-shadow:0 5px 0 color-mix(in srgb,var(--home) 55%,#000)}
+.kp-node.s-wait .kp-dot{background:color-mix(in srgb,var(--warn) 20%,var(--surface));border-color:var(--warn);color:var(--warn)}
+.kp-node.s-closed .kp-dot{opacity:.5}
+.kp-node.s-redo .kp-dot{border-color:var(--bad);color:var(--bad)}
+.kp-node.must:not(.s-done):not(.s-wait) .kp-dot{border-color:var(--gold)}
+.kp-node.cur .kp-dot{width:80px;height:80px;background:var(--gold);color:#2A1B00;border:0;box-shadow:0 6px 0 color-mix(in srgb,var(--gold) 60%,#000),0 0 0 8px color-mix(in srgb,var(--gold) 22%,transparent)}
+.kp-node.cur .kp-dot .i{width:36px;height:36px}
+.kp-node.cur{margin-block:6px}
+.kp-lbl{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kp-lbl b{font-size:17px;font-weight:800;line-height:1.25}
+.kp-lbl small{font-size:13px;color:var(--muted);font-weight:700}
+.kp-node.s-done .kp-lbl b{color:var(--muted);text-decoration:line-through}
+.kp-node.cur .kp-lbl{background:var(--surface);border:1px solid var(--line-2);border-radius:18px;padding:10px 14px;gap:4px}
+.kp-node.cur .kp-lbl small{color:var(--gold-t)}
+.kp-node.cur .kp-lbl .btn{margin-top:6px;align-self:flex-start;min-height:44px;font-size:16px}
+.kp-note{margin:6px 0 0}
+@media (max-width:380px){.kp-node{padding-left:calc(var(--x) * .55)}.kp-link{margin-left:calc(var(--x) * .55 + 29px)}}
+/* Детский вид — крупнее */
+html.kidsui .nav button{font-size:12.5px}
+html.kidsui .nav .ico .i{width:26px;height:26px}
+/* Значки */
+.bbar{height:8px;border-radius:99px;background:color-mix(in srgb,var(--ink) 10%,transparent);overflow:hidden}
+.bbar i{display:block;height:100%;border-radius:99px;background:var(--gold)}
+.bcoll h3{margin:16px 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px 6px}
+.bcell{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;background:none;border:0;padding:4px 2px;border-radius:14px;color:var(--ink);font:inherit;cursor:pointer}
+.bcell:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.bcell b{font-size:13px;line-height:1.2;margin-top:2px}
+.bcell small{font-size:11.5px;color:var(--muted);font-weight:600}
+.bcell small.next{color:var(--gold-t);font-weight:700}
+.badge-svg.locked{filter:grayscale(1) brightness(.6);opacity:.75}
+:root[data-theme="light"] .badge-svg.locked{filter:grayscale(1) brightness(1.05);opacity:.45}
+.bnew{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}
+.bnew-t{font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-t)}
+.bnew-ic{margin:6px 0;filter:drop-shadow(0 0 24px color-mix(in srgb,var(--gold) 30%,transparent))}
+/* Плавающее нижнее меню на телефоне */
+@media (max-width:699px){
+  .nav{left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom,0px));border:1px solid var(--line-2);border-radius:22px;padding-bottom:0;box-shadow:0 10px 30px -12px rgba(0,0,0,.45)}
+  .nav button{min-height:60px;padding:6px 2px}
+  .wrap{padding-bottom:calc(var(--nav) + 44px + env(safe-area-inset-bottom,0px))}
+  .toast{bottom:calc(var(--nav) + 30px + env(safe-area-inset-bottom,0px))}
+}
+@media (max-width:460px){.nav.n6 button{font-size:10px}.nav.n6 .ico{width:44px}}
