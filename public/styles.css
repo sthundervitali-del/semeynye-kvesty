@@ -697,3 +697,8 @@ html.kidsui .nav .ico .i{width:26px;height:26px}
 .ks-ring{min-width:0;padding:12px 6px}
 .kring{width:min(118px,100%);height:auto;aspect-ratio:1}
 @media (max-width:380px){.kring-in .v{font-size:24px}.ks-stats{font-size:11px}}
+.kp-opt{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line-2)}
+.kp-done{display:flex;align-items:center;gap:8px;justify-content:center;padding:10px 14px;border-radius:14px;background:color-mix(in srgb,var(--home) 14%,transparent);color:var(--home);font-weight:800}
+.kp-done .i{width:20px;height:20px}
+.kp-node:not(.must) .kp-dot{border-style:dashed}
+.kp-node.cur:not(.must) .kp-dot{border-style:none}

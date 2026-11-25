@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.7", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.8", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -473,35 +473,34 @@ function kidPath(k) {
     const state = ts.free ? (dl && dl.phase === "closed" ? "closed" : "todo") : ts.status === "redo" ? "redo" : ts.status === "pending" ? "wait" : "done";
     return { t, ts, dl, state, c: order[F.category(t)] ?? 4 };
   });
-  // В путь идут дела на сегодня; недельные и «в любое время» — отдельным списком ниже.
-  const extra = rows.filter(r => r.c >= 2 && rows.some(x => x.c < 2));
-  for (const r of extra) rows.splice(rows.indexOf(r), 1);
   const rank = { done: 0, wait: 1, redo: 2, todo: 3, closed: 4 };
-  rows.sort((x, y) => rank[x.state] - rank[y.state] || x.c - y.c || (x.t.time || "99").localeCompare(y.t.time || "99"));
-  const cur = rows.find(r => r.state === "redo" || r.state === "todo");
-  const left = rows.filter(r => r.state === "redo" || r.state === "todo").length, doneN = rows.filter(r => r.state === "done" || r.state === "wait").length;
+  const sort = list => list.sort((x, y) => rank[x.state] - rank[y.state] || x.c - y.c || (x.t.time || "99").localeCompare(y.t.time || "99"));
+  const must = sort(rows.filter(r => r.t.mandatory)), opt = sort(rows.filter(r => !r.t.mandatory));
+  const open = r => r.state === "redo" || r.state === "todo";
+  const cur = must.find(open) || opt.find(open);
   const X = [16, 92, 32, 128, 52, 112];
+  const path = list => `<div class="kpath">${list.map((r, i) => {
+    const { t, dl, state } = r, x = F.mult(S.cfg, s, t.id), late = dl && dl.phase === "late" && state === "todo";
+    const pts = late ? Math.round(t.pts * x * dl.pct / 100) : t.pts * x, isCur = r === cur;
+    const act = open(r) ? `data-act="done" data-id="${t.id}"${state === "redo" ? ` data-entry="${r.ts.entry.id}"` : ""}` : "";
+    const dot = state === "done" ? ic("check") : state === "wait" ? ic("clock") : state === "closed" ? ic("x") : isCur ? ic(CATS[t.cat]?.ic || "star") : `<span class="num">+${pts}</span>`;
+    const sub = state === "wait" ? "Проверяется…" : state === "redo" ? "Нужно исправить" : state === "closed" ? "Время вышло" : state === "done" ? "Принято" :
+      [`+${pts}`, t.bound && t.time ? (dl && dl.phase === "open" ? `до ${fmtTime(dl.deadline)}` : esc(t.time)) : "", !t.bound && t.freq === "week" && r.ts.need ? `${r.ts.count || 0} из ${r.ts.need} на неделе` : "", !t.bound && t.freq === "many" ? "сколько угодно раз" : "", late ? "с опозданием" : "", t.photo ? "с фото" : ""].filter(Boolean).join(" · ");
+    return (i ? `<div class="kp-link" style="--x:${X[(i - 1) % X.length]}px"></div>` : "") + `<div class="kp-node s-${state}${isCur ? " cur" : ""}${t.mandatory ? " must" : ""}" style="--x:${X[i % X.length]}px">
+      ${act ? `<button class="kp-dot" ${act} aria-label="${esc(t.title)}: готово">${dot}</button>` : `<span class="kp-dot">${dot}</span>`}
+      <div class="kp-lbl"><b>${esc(t.title)}</b><small>${sub}</small>${isCur ? `<button class="btn go" ${act}>${state === "redo" ? "Исправил!" : late ? "Сделал с опозданием" : "Готово!"}</button>` : ""}</div></div>`
+      + (state === "redo" && r.ts.entry?.dec?.note ? `<div class="note kp-note"><b>Нужна доработка.</b> ${esc(r.ts.entry.dec.note)}</div>` : "");
+  }).join("")}</div>`;
   let out = `<section class="kp-head"><div class="kp-hi"><b>Привет, ${esc(k.name)}!</b><span class="streak-pill">${ic("flame", "xs")} ${st} ${plural(st, "день", "дня", "дней")} подряд</span></div>
     <div class="kp-coins"><span class="coin">₵</span><span class="num">${a.available}</span></div></section>`;
   if (info.type === "off" && info.reason !== "weekend") out += `<span class="daychip">${ic("sparkle", "xs")} Сегодня выходной${info.name ? ": " + esc(info.name) : ""}</span>`;
   if (!rows.length) return out + `<div class="empty big">${ic("sparkle")}<b>На сегодня дел нет</b><span>Отдыхай!</span></div>`;
-  out += `<div class="group-h kp-title"><h2>Путь дня</h2><span class="hint num">${doneN} из ${rows.length}</span></div><div class="kpath">`;
-  rows.forEach((r, i) => {
-    const { t, dl, state } = r, x = F.mult(S.cfg, s, t.id), late = dl && dl.phase === "late" && state === "todo";
-    const pts = late ? Math.round(t.pts * x * dl.pct / 100) : t.pts * x, isCur = r === cur;
-    const act = state === "todo" || state === "redo" ? `data-act="done" data-id="${t.id}"${state === "redo" ? ` data-entry="${r.ts.entry.id}"` : ""}` : "";
-    const dot = state === "done" ? ic("check") : state === "wait" ? ic("clock") : state === "closed" ? ic("x") : isCur ? ic(CATS[t.cat]?.ic || "star") : `<span class="num">+${pts}</span>`;
-    const sub = state === "wait" ? "Проверяется…" : state === "redo" ? "Нужно исправить" : state === "closed" ? "Время вышло" : state === "done" ? "Принято" :
-      [`+${pts}`, t.bound && t.time ? (dl && dl.phase === "open" ? `до ${fmtTime(dl.deadline)}` : esc(t.time)) : "", late ? "с опозданием" : "", t.photo ? "с фото" : ""].filter(Boolean).join(" · ");
-    if (i) out += `<div class="kp-link" style="--x:${X[(i - 1) % X.length]}px"></div>`;
-    out += `<div class="kp-node s-${state}${isCur ? " cur" : ""}${t.mandatory ? " must" : ""}" style="--x:${X[i % X.length]}px">
-      ${act ? `<button class="kp-dot" ${act} aria-label="${esc(t.title)}: готово">${dot}</button>` : `<span class="kp-dot">${dot}</span>`}
-      <div class="kp-lbl"><b>${esc(t.title)}</b><small>${sub}</small>${isCur ? `<button class="btn go" ${act}>${state === "redo" ? "Исправил!" : late ? "Сделал с опозданием" : "Готово!"}</button>` : ""}</div></div>`;
-    if (state === "redo" && r.ts.entry?.dec?.note) out += `<div class="note kp-note"><b>Нужна доработка.</b> ${esc(r.ts.entry.dec.note)}</div>`;
-  });
-  out += `</div>`;
-  if (!left) out += `<div class="empty big">${ic("sparkle")}<b>Все дела на сегодня сделаны!</b><span>Ты молодец.</span></div>`;
-  if (extra.length) out += `<section class="card"><div class="group-h"><h2>Ещё можно сделать</h2><span class="hint">за дополнительные баллы</span></div><div class="group">${extra.map(r => { if (r.state === "closed") r.ts.closed = true; return taskRow(r.t, k, s, r.ts); }).join("")}</div></section>`;
+  if (must.length) {
+    const doneN = must.filter(r => r.state === "done" || r.state === "wait").length;
+    out += `<div class="group-h kp-title"><h2>Путь дня</h2><span class="hint num">${doneN} из ${must.length}</span></div>${path(must)}`;
+    if (!must.some(open)) out += `<div class="kp-done">${ic("sparkle")}<b>Обязательные дела сделаны!</b></div>`;
+  }
+  if (opt.length) out += `<div class="group-h kp-title kp-opt"><h2>${must.length ? "Ещё можно" : "Путь дня"}</h2><span class="hint">за дополнительные баллы</span></div>${path(opt)}`;
   return out;
 }
 function kidShop(k) {
