@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.3", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.4", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -25,6 +25,7 @@ const COLORS = { violet: "var(--study)", teal: "var(--home)", rose: "var(--other
   indigo: "#5B5BD6", blue: "#2F7CF6", sky: "#0EA5E9", green: "#22A55B", lime: "#7CB518", orange: "#F97316", red: "#E5484D", pink: "#EC4899", brown: "#A0623A", slate: "#64748B" };
 const COLOR_NAMES = { violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой", indigo: "Индиго", blue: "Синий", sky: "Голубой", green: "Зелёный", lime: "Салатовый", orange: "Оранжевый", red: "Красный", pink: "Малиновый", brown: "Коричневый", slate: "Серый" };
 const HEX_RE = /^#[0-9a-f]{6}$/i;
+const colorName = c => COLOR_NAMES[c] || (HEX_RE.test(c || "") ? "Свой цвет" : COLOR_NAMES.violet);
 const RANKS = ["Новичок", "Помощник", "Умелец", "Мастер дома", "Герой семьи", "Легенда", "Великий магистр"];
 const appIcon = (s = 34) => `<img class="app-ic" width="${s}" height="${s}" src="${window.FQ_ICON || "/icon.svg"}" alt="">`;
 const coin = (s = 18) => `<svg class="coin" width="${s}" height="${s}" aria-hidden="true"><use href="#coin"/></svg>`;
@@ -1401,8 +1402,7 @@ function settingsPage(p) {
       <label>Имя<input id="kn-${k.id}" name="n-${k.id}" value="${esc(k.name)}" required></label>
       <label>Возраст<input id="ka-${k.id}" name="a-${k.id}" type="number" inputmode="numeric" min="3" max="18" value="${k.age || ""}"></label>
       <label class="full">Вид для ребёнка<select id="km-${k.id}" name="m-${k.id}"><option value="auto" ${!k.mode || k.mode === "auto" ? "selected" : ""}>По возрасту (сейчас: ${kidUI({ age: k.age }) === "kids" ? "детский" : "обычный"})</option><option value="kids" ${k.mode === "kids" ? "selected" : ""}>Детский — путь дня, крупно</option><option value="normal" ${k.mode === "normal" ? "selected" : ""}>Обычный</option></select></label>
-      <fieldset class="full swatches"><legend>Цвет</legend>${Object.keys(COLORS).map(c => `<label class="csw" title="${COLOR_NAMES[c]}"><input type="radio" name="c-${k.id}" value="${c}" ${k.color === c || (!k.color && c === "violet") ? "checked" : ""} aria-label="${COLOR_NAMES[c]}"><span style="background:${COLORS[c]}"></span></label>`).join("")}
-        <label class="csw csw-own" title="Свой цвет"><input type="radio" name="c-${k.id}" value="${HEX_RE.test(k.color || "") ? k.color : "#8B5CF6"}" ${HEX_RE.test(k.color || "") ? "checked" : ""} aria-label="Свой цвет" data-own-radio><span style="background:${HEX_RE.test(k.color || "") ? k.color : "conic-gradient(#E5484D,#F97316,#F2B233,#22A55B,#0EA5E9,#5B5BD6,#EC4899,#E5484D)"}"></span><input type="color" class="csw-pick" value="${HEX_RE.test(k.color || "") ? k.color : "#8B5CF6"}" data-own-color aria-label="Выбрать свой цвет"></label></fieldset>`).join("")}
+      <label>Цвет<button type="button" class="color-btn" data-act="pickColor" data-id="${k.id}" aria-haspopup="dialog"><span class="dot" style="background:${kidColor(k)}"></span><span class="nm">${colorName(k.color)}</span>${ic("chev-r", "xs")}</button><input type="hidden" name="c-${k.id}" value="${esc(k.color || "violet")}"></label>`).join("")}
       <p class="hint full">«Детский» вид — для младших: дела дня выстроены путём, кнопки крупнее, меньше разделов. «По возрасту» — детский до 9 лет включительно. Дела, баллы и награды в обоих видах общие. Сам ребёнок вид не переключает.</p>
       <div class="full btnrow"><button class="btn go">Сохранить</button><button type="button" class="btn ghost" data-act="addKid">${ic("plus")} Добавить ребёнка</button></div></form></section>`;
   if (p === "points") { const wk = F.weekly(S.cfg); return head("Баллы") + `<section class="card"><form class="grid" data-form="set-points">
@@ -1676,6 +1676,18 @@ document.addEventListener("click", e => {
     if (S.user && S.me && S.be && !S.be.demo) S.be.updateMember(S.user.uid, { lang: id }).catch(() => {});
     if (document.querySelector(".scrim")) closeModal();
     render(); return;
+  }
+  if (act === "pickColor") {
+    const hid = document.querySelector(`input[name="c-${id}"]`); if (!hid) return;
+    const cur = hid.value, own = HEX_RE.test(cur) ? cur : "#8B5CF6";
+    modal(`<h2>Цвет ребёнка</h2><div class="cpal">${Object.keys(COLORS).map(c => `<button type="button" class="cpal-sw${cur === c ? " on" : ""}" data-c="${c}" aria-pressed="${cur === c}" title="${COLOR_NAMES[c]}"><span style="background:${COLORS[c]}"></span><small>${COLOR_NAMES[c]}</small></button>`).join("")}</div>
+      <label class="cpal-own">Свой цвет<span class="cpal-row"><input type="color" id="cpal-in" value="${own}"><button type="button" class="btn ghost" id="cpal-use">Выбрать этот</button></span></label>
+      <div class="btns"><button class="btn ghost" data-act="closeModal">Отмена</button></div>`, m => {
+      const apply = v => { hid.value = v; const b = document.querySelector(`.color-btn[data-id="${id}"]`); if (b) { b.querySelector(".dot").style.background = COLORS[v] || v; b.querySelector(".nm").textContent = colorName(v); } closeModal(); };
+      m.querySelectorAll(".cpal-sw").forEach(b => b.onclick = () => apply(b.dataset.c));
+      m.querySelector("#cpal-use").onclick = () => apply(m.querySelector("#cpal-in").value);
+    });
+    return;
   }
   if (act === "badgeInfo") { const kid = viewingKid() || el.dataset.kid; if (kid && BADGE_UI[id]) badgeModal(id, kid, false); return; }
   if (act === "toggleLoud") { lsSet("fq-loud", el.checked ? null : "0"); if (el.checked) beep("alert"); return; }
