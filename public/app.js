@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.1", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.2", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -307,7 +307,7 @@ function render() {
   const tabs = kidMode
     ? (kidUI(kidById(viewingKid())) === "kids"
       ? [["today", "n-home", "Путь"], ["shop", "n-gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "n-piggy", "Копилка"]] : []), ["badges", "n-medal", "Значки"]]
-      : [["today", "n-home", "Сегодня"], ["cal", "n-cal", "Календарь"], ["shop", "n-gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "n-piggy", "Копилка"]] : []), ["hist", "n-history", "История"], ["badges", "n-medal", "Значки"]])
+      : [["today", "n-home", "Сегодня"], ["cal", "n-cal", "Календарь"], ["shop", "n-gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "n-piggy", "Копилка"]] : []), ["badges", "n-medal", "Значки"]])
     : [["review", "n-inbox", "Проверка"], ["cal", "n-cal", "Календарь"], ["tasks", "n-tasks", "Дела"], ["rewards", "n-gift", "Награды"], ["settings", "n-gear", "Настройки"]];
   if (!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
   const pend = pendingList().length;
@@ -317,7 +317,7 @@ function render() {
   if (kidMode) {
     const k = kidById(viewingKid());
     if (!k) html += `<div class="empty">Профиль ребёнка не найден. Попросите родителей прислать новый код приглашения.</div>`;
-    else html += ({ today: kidToday, cal: calendarView, shop: kidShop, bank: kidBank, hist: kidHistory, badges: kidBadges })[S.tab](k);
+    else html += ({ today: kidToday, cal: kidCalHist, shop: kidShop, bank: kidBank, hist: kidCalHist, badges: kidBadges })[S.tab === "hist" ? "cal" : S.tab](k);
   } else html += ({ review: parentReview, cal: calendarView, tasks: parentTasks, rewards: parentRewards, settings: parentSettings })[S.tab]();
   html += `</div>`;
   app.innerHTML = html;
@@ -556,9 +556,15 @@ function histRow(e) {
   const note = (e.dec?.note && e.status !== "pending" ? `<br><small>${e.type === "wish" ? "Родители" : "Проверка"}: ${esc(e.dec.note)}</small>` : "") + (e.type === "task" && e.status === "ok" && e.dec?.instant ? `<br><small class="gold-t">${ic("coins", "xs")} сразу в банк</small>` : "");
   return `<div class="it"><span>${label}<br><small>${fmtDate(e.at)}</small>${note}${canWithdraw(e) ? `<br><button class="btn sm ghost wd" data-act="withdraw" data-id="${e.id}">Отменить</button>` : ""}</span>${pill}<span class="delta num ${e.status === "no" || e.status === "redo" || e.status === "pending" ? "" : minus ? "minus" : "plus"}">${sign}</span></div>`;
 }
-function kidHistory(k) {
+/* Календарь и история ребёнка — одна вкладка с переключателем «Дни · Баллы · Заявки». */
+function kidCalHist(k) {
+  const mode = ["pts", "req"].includes(S.histMode) ? S.histMode : "cal";
+  const seg = `<div class="seg seg-top" role="group" aria-label="Что показать">${[["cal", "Дни"], ["pts", "Баллы"], ["req", "Заявки"]].map(([v, n]) => `<button data-act="histMode" data-id="${v}" aria-pressed="${mode === v}">${n}</button>`).join("")}</div>`;
+  return seg + (mode === "cal" ? calendarView() : kidHistory(k, true));
+}
+function kidHistory(k, inTab) {
   const mode = S.histMode === "req" ? "req" : "pts";
-  const seg = `<div class="seg" role="group" aria-label="Что показать">${[["pts", "Баллы"], ["req", "Заявки"]].map(([v, n]) => `<button data-act="histMode" data-id="${v}" aria-pressed="${mode === v}">${n}</button>`).join("")}</div>`;
+  const seg = inTab ? "" : `<div class="seg" role="group" aria-label="Что показать">${[["pts", "Баллы"], ["req", "Заявки"]].map(([v, n]) => `<button data-act="histMode" data-id="${v}" aria-pressed="${mode === v}">${n}</button>`).join("")}</div>`;
   if (mode === "pts") return `<section class="card"><div class="card-head"><h2>${ic("history", "h")} История баллов</h2></div>${seg}${ledgerHtml(k.id)}</section>`;
   const items = [...S.data.entries.filter(e => e.kid === k.id && !["dep", "depclose", "xfer"].includes(e.type)), ...S.data.gifts.filter(g => g.kid === k.id)].sort((a, b) => b.at - a.at).slice(0, 60);
   return `<section class="card"><div class="card-head"><h2>${ic("history", "h")} Заявки</h2></div>${seg}${items.length ? `<div class="list">${items.map(histRow).join("")}</div>` : `<div class="empty">${ic("history")}Тут появятся выполненные дела и награды.</div>`}</section>`;

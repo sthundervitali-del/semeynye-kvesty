@@ -660,3 +660,5 @@ html.kidsui .nav .ico .i{width:26px;height:26px}
 .wch-days .wch-bars{height:auto;align-items:center}
 .wch-days span{font-size:11px;font-weight:600;color:var(--muted);text-align:center}
 .wch-days span.on{color:var(--gold-t);font-weight:800}
+.seg.seg-top{align-self:stretch}
+.seg.seg-top button{flex:1}
