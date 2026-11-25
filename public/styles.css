@@ -639,3 +639,24 @@ html.kidsui .nav .ico .i{width:26px;height:26px}
   .toast{bottom:calc(var(--nav) + 30px + env(safe-area-inset-bottom,0px))}
 }
 @media (max-width:460px){.nav.n6 button{font-size:10px}.nav.n6 .ico{width:44px}}
+/* v2.20.1: меню как в прототипе C; недельная диаграмма */
+.nav .ico{background:none!important;width:44px}
+.nav .ico .i{width:24px;height:24px;stroke-width:2}
+.nav button[aria-current="page"]{color:var(--gold-t)}
+.nav button[aria-current="page"] .ico{color:var(--gold-t)}
+@media (max-width:699px){
+  .nav{background:color-mix(in srgb,var(--surface) 92%,transparent);border-color:var(--line-2)}
+  .nav button{gap:2px;font-size:11px;font-weight:700}
+  .nav button[aria-current="page"]{font-weight:800}
+}
+.wch{display:flex;flex-direction:column;gap:12px}
+.wch-row{display:flex;align-items:center;gap:10px}
+.wch-n{width:64px;flex:none;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wch-bars{flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:end;height:48px}
+.wch-b{display:block;border-radius:6px;min-height:4px}
+.wch-b.zero,.wch-b.fut{background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.wch-b.fut{opacity:.5}
+.wch-p{width:42px;flex:none;text-align:right;font-family:var(--display);font-weight:700;font-size:14px}
+.wch-days .wch-bars{height:auto;align-items:center}
+.wch-days span{font-size:11px;font-weight:600;color:var(--muted);text-align:center}
+.wch-days span.on{color:var(--gold-t);font-weight:800}

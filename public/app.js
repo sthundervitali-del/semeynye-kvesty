@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.0", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.1", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -306,9 +306,9 @@ function render() {
   const kidMode = !!viewingKid();
   const tabs = kidMode
     ? (kidUI(kidById(viewingKid())) === "kids"
-      ? [["today", "home", "Путь"], ["shop", "gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "piggy", "Копилка"]] : []), ["badges", "medal", "Значки"]]
-      : [["today", "check-circle", "Сегодня"], ["cal", "calendar", "Календарь"], ["shop", "gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "piggy", "Копилка"]] : []), ["hist", "history", "История"], ["badges", "medal", "Значки"]])
-    : [["review", "inbox", "Проверка"], ["cal", "calendar", "Календарь"], ["tasks", "checklist", "Дела"], ["rewards", "gift", "Награды"], ["settings", "sliders", "Настройки"]];
+      ? [["today", "n-home", "Путь"], ["shop", "n-gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "n-piggy", "Копилка"]] : []), ["badges", "n-medal", "Значки"]]
+      : [["today", "n-home", "Сегодня"], ["cal", "n-cal", "Календарь"], ["shop", "n-gift", "Награды"], ...(hasBank(viewingKid()) ? [["bank", "n-piggy", "Копилка"]] : []), ["hist", "n-history", "История"], ["badges", "n-medal", "Значки"]])
+    : [["review", "n-inbox", "Проверка"], ["cal", "n-cal", "Календарь"], ["tasks", "n-tasks", "Дела"], ["rewards", "n-gift", "Награды"], ["settings", "n-gear", "Настройки"]];
   if (!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
   const pend = pendingList().length;
   document.documentElement.classList.toggle("kidsui", kidMode && kidUI(kidById(viewingKid())) === "kids");
@@ -880,10 +880,30 @@ function startCard() {
     ${kidsList().length ? step(hasKids, "Пригласите детей", "Каждому ребёнку — свой код для входа", "inviteWho", "child", "Пригласить") : step(false, "Добавьте детей", "Имя, возраст и цвет — потом пригласите каждого", "goSet", "kids", "Добавить")}
   </ol></section>`;
 }
+/* Неделя: сколько дел выполнено по дням — столбики для каждого ребёнка (как в прототипе C). */
+function weekChart() {
+  const kids = kidsList(); if (!kids.length) return "";
+  const t = today(), ws = F.weekStart(t), days = Array.from({ length: 7 }, (_, i) => F.addDays(ws, i));
+  const rows = kids.map(k => {
+    let sumDone = 0, sumPlan = 0;
+    const bars = days.map(d => {
+      if (d > t) return `<i class="wch-b fut" style="height:8%"></i>`;
+      const ds = F.daySummary(k.id, d, S.data, S.cfg, t), done = ds.done.filter(e => e.status !== "no").length, plan = Math.max(ds.planned.length, done);
+      sumDone += done; sumPlan += plan;
+      const h = plan ? Math.max(8, Math.round(done / plan * 100)) : 8;
+      return `<i class="wch-b${done ? "" : " zero"}" style="height:${h}%;background:${done ? kidColor(k) : ""}" title="${humanDay(d)}: ${done} из ${plan}"></i>`;
+    }).join("");
+    const pct = sumPlan ? Math.round(sumDone / sumPlan * 100) : 0;
+    return `<div class="wch-row"><span class="wch-n">${esc(k.name)}</span><div class="wch-bars">${bars}</div><span class="wch-p num">${pct}%</span></div>`;
+  }).join("");
+  const dn = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  return `<section class="card wch"><div class="group-h"><h2>${ic("n-cal", "h")} Неделя</h2><span class="hint">выполнено дел</span></div>${rows}
+    <div class="wch-row wch-days"><span class="wch-n"></span><div class="wch-bars">${dn.map((n, i) => `<span class="${days[i] === t ? "on" : ""}">${n}</span>`).join("")}</div><span class="wch-p"></span></div></section>`;
+}
 function parentReview() {
   const pend = pendingList().sort((a, b) => a.at - b.at);
   let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending; return `<button class="ks ks-btn" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">${F.weekly(S.cfg) ? `копится ${a.locked} · ` : ""}сегодня +${a.today} · ${ic("flame", "xs")} ${streak(k.id)} · ${ic("medal", "xs")} ${badgeState(k.id).n}${dep ? ` · на депозитах ${dep}` : ""}</small><small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
-  out += `<section class="card"><h2>${ic("inbox", "h")} Ждут проверки${pend.length ? " · " + pend.length : ""}</h2>`;
+  out += `<section class="card"><h2>${ic("n-inbox", "h")} Ждут проверки${pend.length ? " · " + pend.length : ""}</h2>`;
   if (!pend.length) out += `<div class="empty">${ic("check-circle")}Всё проверено. Новых заявок нет.</div>`;
   else out += pend.map(e => {
     const k = kidById(e.kid);
@@ -896,6 +916,7 @@ function parentReview() {
       <div class="act">${btns}</div></div>`;
   }).join("");
   out += `<p class="hint">Дети видят решения как итог автоматической проверки. Комментарий «на доработку» они увидят с пометкой «Проверка».</p></section>`;
+  out += weekChart();
   const recent = S.data.entries.filter(e => e.dec?.status && e.type !== "game" && e.type !== "xfer").sort((a, b) => (b.dec.decidedAt || 0) - (a.dec.decidedAt || 0)).slice(0, 8);
   if (recent.length) out += `<section class="card"><h2>${ic("history", "h")} Недавние решения</h2><div class="list">${recent.map(e => `<div class="it"><span>${esc(kidById(e.kid)?.name || "")}: ${esc(e.title)}<br><small>${fmtDate(e.dec.decidedAt || e.at)}</small></span><span class="pill ${e.status === "ok" ? "ok" : e.status === "no" ? "no" : "wait"}">${{ ok: "принято", no: "отклонено", redo: "доработка", pending: "повторно" }[e.status]}</span><button class="btn sm ghost" data-act="undo" data-id="${e.id}">Отменить</button></div>`).join("")}</div></section>`;
   setTimeout(loadPhotos, 0);
