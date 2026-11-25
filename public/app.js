@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.6", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.7", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -322,7 +322,7 @@ function render() {
     const k = kidById(viewingKid());
     if (!k) html += `<div class="empty">Профиль ребёнка не найден. Попросите родителей прислать новый код приглашения.</div>`;
     else html += ({ today: kidToday, cal: kidCalHist, shop: kidShop, bank: kidBank, hist: kidCalHist, badges: kidBadges })[S.tab === "hist" ? "cal" : S.tab](k);
-  } else html += ({ review: parentReview, cal: calendarView, tasks: parentTasks, rewards: parentRewards, settings: parentSettings })[S.tab]();
+  } else html += ({ review: parentReview, cal: parentCalHist, tasks: parentTasks, rewards: parentRewards, settings: parentSettings })[S.tab]();
   html += `</div>`;
   app.innerHTML = html;
   I18N.apply(app);
@@ -565,6 +565,15 @@ function kidCalHist(k) {
   const mode = ["pts", "req"].includes(S.histMode) ? S.histMode : "cal";
   const seg = `<div class="seg seg-top" role="group" aria-label="Что показать">${[["cal", "Дни"], ["pts", "Баллы"], ["req", "Заявки"]].map(([v, n]) => `<button data-act="histMode" data-id="${v}" aria-pressed="${mode === v}">${n}</button>`).join("")}</div>`;
   return seg + (mode === "cal" ? calendarView() : kidHistory(k, true));
+}
+// У родителя: календарь, баллы и заявки выбранного ребёнка — одна вкладка.
+function parentCalHist() {
+  const kids = kidsList(), mode = ["pts", "req"].includes(S.histMode) ? S.histMode : "cal";
+  if (!S.calKid || !kidById(S.calKid)) S.calKid = kids[0]?.id;
+  const seg = `<div class="seg seg-top" role="group" aria-label="Что показать">${[["cal", "Дни"], ["pts", "Баллы"], ["req", "Заявки"]].map(([v, n]) => `<button data-act="histMode" data-id="${v}" aria-pressed="${mode === v}">${n}</button>`).join("")}</div>`;
+  if (mode === "cal" || !S.calKid) return seg + calendarView();
+  const chips = kids.length > 1 ? `<div class="chips">${kids.map(k => `<button class="chip" data-act="calKid" data-id="${k.id}" aria-pressed="${k.id === S.calKid}">${esc(k.name)}</button>`).join("")}</div>` : "";
+  return seg + chips + kidHistory(kidById(S.calKid), true);
 }
 function kidHistory(k, inTab) {
   const mode = S.histMode === "req" ? "req" : "pts";
@@ -1767,7 +1776,7 @@ document.addEventListener("click", e => {
       S.be.putEntry(en.kid, doc.slice(en.kid.length + 1), { ...raw, withdrawn: true, withdrawnAt: Date.now() }).then(() => toast("Заявка отменена")).catch(fail);
     }); return; }
   if (act === "done") { const t = S.cfg.tasks[id]; if (t) submitTask(t, el.dataset.entry); return; }
-  if (act === "ledger") return ledgerModal(id);
+  if (act === "ledger") { if (isParent() && !viewingKid()) { S.calKid = id; S.histMode = "pts"; S.tab = "cal"; render(); scrollTo(0, 0); return; } return ledgerModal(id); }
   if (act === "histMode") { S.histMode = id; return render(); }
   if (act === "depOpen") return depOpen(id);
   if (act === "xferOpen") return xferOpen();

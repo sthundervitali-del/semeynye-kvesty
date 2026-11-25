@@ -693,3 +693,7 @@ html.kidsui .nav .ico .i{width:26px;height:26px}
 .kring-in .v{font-family:var(--display);font-size:28px;font-weight:700;line-height:1;color:var(--ink)}
 .kring-in small{font-size:11px;color:var(--muted)}
 .ks-stats{line-height:1.5}
+.kids-sum:has(.ks-ring){grid-template-columns:repeat(2,minmax(0,1fr))}
+.ks-ring{min-width:0;padding:12px 6px}
+.kring{width:min(118px,100%);height:auto;aspect-ratio:1}
+@media (max-width:380px){.kring-in .v{font-size:24px}.ks-stats{font-size:11px}}
