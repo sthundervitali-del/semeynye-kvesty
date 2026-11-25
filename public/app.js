@@ -16,7 +16,7 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.5", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.6", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
@@ -912,7 +912,11 @@ function weekChart() {
 }
 function parentReview() {
   const pend = pendingList().sort((a, b) => a.at - b.at);
-  let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending; return `<button class="ks ks-btn" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}"><span>${esc(k.name)}</span><span class="v num">${a.available}</span><small class="hint num">${F.weekly(S.cfg) ? `копится ${a.locked} · ` : ""}сегодня +${a.today} · ${ic("flame", "xs")} ${streak(k.id)} · ${ic("medal", "xs")} ${badgeState(k.id).n}${dep ? ` · на депозитах ${dep}` : ""}</small><small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
+  let out = startCard() + `<section class="card"><h2>${ic("coins", "h")} Счета детей</h2>${kidsList().length ? "" : `<div class="empty">Детей пока нет.<button class="btn sm go" data-act="goSet" data-id="kids">${ic("plus")} Добавить ребёнка</button></div>`}<div class="kids-sum">${kidsList().map(k => { const a = acct(k.id), dep = a.deposited + a.depPending, L = level(k.id), C = 2 * Math.PI * 44, pct = Math.min(1, L.cur / 150); return `<button class="ks ks-btn ks-ring" data-act="ledger" data-id="${k.id}" aria-label="История баллов: ${esc(k.name)}">
+      <span class="ks-top"><b>${esc(k.name)}</b><small class="hint">ур. ${L.lv}</small></span>
+      <span class="kring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" class="ring-bg"/><circle cx="50" cy="50" r="44" class="kring-fg" style="stroke:${kidColor(k)}" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 50 50)"/></svg><span class="kring-in"><span class="v num">${a.available}</span><small>баллов</small></span></span>
+      <small class="hint num ks-stats">+${a.today} сегодня · ${ic("flame", "xs")} ${streak(k.id)} · ${ic("medal", "xs")} ${badgeState(k.id).n}${F.weekly(S.cfg) ? `<br>копится ${a.locked}` : ""}${dep ? `<br>на депозитах ${dep}` : ""}</small>
+      <small class="ks-more">История баллов ${ic("chev-r", "xs")}</small></button>`; }).join("")}</div></section>`;
   out += `<section class="card"><h2>${ic("n-inbox", "h")} Ждут проверки${pend.length ? " · " + pend.length : ""}</h2>`;
   if (!pend.length) out += `<div class="empty">${ic("check-circle")}Всё проверено. Новых заявок нет.</div>`;
   else out += pend.map(e => {

@@ -682,3 +682,14 @@ html.kidsui .nav .ico .i{width:26px;height:26px}
 .cpal-sw:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .cpal-own .cpal-row{display:flex;gap:10px;align-items:center}
 .cpal-own input[type=color]{width:56px;height:44px;padding:2px;border-radius:10px;border:1px solid var(--line-2);background:var(--bg);cursor:pointer}
+.ks-ring{align-items:center;text-align:center;gap:6px;padding:14px 10px}
+.ks-top{display:flex;align-items:baseline;gap:6px;justify-content:center}
+.ks-top b{font-size:15px}
+.kring{position:relative;width:118px;height:118px;display:block}
+.kring svg{width:100%;height:100%}
+.kring .ring-bg{stroke-width:9}
+.kring-fg{fill:none;stroke-width:9;stroke-linecap:round}
+.kring-in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.kring-in .v{font-family:var(--display);font-size:28px;font-weight:700;line-height:1;color:var(--ink)}
+.kring-in small{font-size:11px;color:var(--muted)}
+.ks-stats{line-height:1.5}
