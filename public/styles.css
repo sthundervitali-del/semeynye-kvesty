@@ -662,3 +662,11 @@ html.kidsui .nav .ico .i{width:26px;height:26px}
 .wch-days span.on{color:var(--gold-t);font-weight:800}
 .seg.seg-top{align-self:stretch}
 .seg.seg-top button{flex:1}
+.swatches{border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:10px}
+.swatches legend{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px;padding:0}
+.csw{position:relative;width:40px;height:40px;cursor:pointer;display:block}
+.csw input[type=radio]{position:absolute!important;opacity:0!important;inset:0;width:100%!important;height:100%!important;margin:0!important;cursor:pointer;-webkit-appearance:none;appearance:none}
+.csw span{display:block;width:100%;height:100%;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.csw input[type=radio]:checked+span{box-shadow:0 0 0 3px var(--bg-2),0 0 0 5px var(--ink)}
+.csw input[type=radio]:focus-visible+span{outline:2px solid var(--gold);outline-offset:4px}
+.csw-pick{position:absolute!important;inset:0;width:100%!important;height:100%!important;min-height:0!important;opacity:0!important;cursor:pointer;border:0!important;padding:0!important}

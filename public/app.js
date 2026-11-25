@@ -16,12 +16,15 @@ const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DOW_LONG = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 const dShort = ts => { const d = new Date(ts); return d.getDate() + " " + MONTHS_G[d.getMonth()]; };
 const humanDay = s => { const d = F.parseDay(s); return d.getDate() + " " + MONTHS_G[d.getMonth()] + ", " + DOW_LONG[F.isoDow(s) - 1]; };
-const APP_VERSION = "2.20.2", APP_DATE = "25.11.2026";
+const APP_VERSION = "2.20.3", APP_DATE = "25.11.2026";
 const I18N = window.I18N, tr = s => I18N.tr(s);
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const CATS = { home: { n: "Дом", ic: "home" }, study: { n: "Учёба", ic: "book" }, other: { n: "Полезное", ic: "star" } };
 const FREQ = { day: "раз в день", week: "N раз в неделю", many: "сколько угодно", once: "один раз" };
-const COLORS = { violet: "var(--study)", teal: "var(--home)", rose: "var(--other)", gold: "var(--gold)" };
+const COLORS = { violet: "var(--study)", teal: "var(--home)", rose: "var(--other)", gold: "var(--gold)",
+  indigo: "#5B5BD6", blue: "#2F7CF6", sky: "#0EA5E9", green: "#22A55B", lime: "#7CB518", orange: "#F97316", red: "#E5484D", pink: "#EC4899", brown: "#A0623A", slate: "#64748B" };
+const COLOR_NAMES = { violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой", indigo: "Индиго", blue: "Синий", sky: "Голубой", green: "Зелёный", lime: "Салатовый", orange: "Оранжевый", red: "Красный", pink: "Малиновый", brown: "Коричневый", slate: "Серый" };
+const HEX_RE = /^#[0-9a-f]{6}$/i;
 const RANKS = ["Новичок", "Помощник", "Умелец", "Мастер дома", "Герой семьи", "Легенда", "Великий магистр"];
 const appIcon = (s = 34) => `<img class="app-ic" width="${s}" height="${s}" src="${window.FQ_ICON || "/icon.svg"}" alt="">`;
 const coin = (s = 18) => `<svg class="coin" width="${s}" height="${s}" aria-hidden="true"><use href="#coin"/></svg>`;
@@ -47,7 +50,7 @@ function avatar(name, img, cls = "", style = "", attrs = "", tag = "span") {
 const kidsList = () => S.cfg?.kids || [];
 const kidById = id => kidsList().find(k => k.id === id);
 const viewingKid = () => isParent() ? S.preview : S.me?.kidId;
-const kidColor = k => COLORS[k?.color] || COLORS.violet;
+const kidColor = k => COLORS[k?.color] || (HEX_RE.test(k?.color || "") ? k.color : COLORS.violet);
 
 /* ---------- стартовый набор дел ---------- */
 const ALL7 = [1, 2, 3, 4, 5, 6, 7];
@@ -1398,7 +1401,8 @@ function settingsPage(p) {
       <label>Имя<input id="kn-${k.id}" name="n-${k.id}" value="${esc(k.name)}" required></label>
       <label>Возраст<input id="ka-${k.id}" name="a-${k.id}" type="number" inputmode="numeric" min="3" max="18" value="${k.age || ""}"></label>
       <label class="full">Вид для ребёнка<select id="km-${k.id}" name="m-${k.id}"><option value="auto" ${!k.mode || k.mode === "auto" ? "selected" : ""}>По возрасту (сейчас: ${kidUI({ age: k.age }) === "kids" ? "детский" : "обычный"})</option><option value="kids" ${k.mode === "kids" ? "selected" : ""}>Детский — путь дня, крупно</option><option value="normal" ${k.mode === "normal" ? "selected" : ""}>Обычный</option></select></label>
-      <label>Цвет<select id="kc-${k.id}" name="c-${k.id}">${Object.keys(COLORS).map(c => `<option value="${c}" ${k.color === c ? "selected" : ""}>${{ violet: "Фиолетовый", teal: "Бирюзовый", rose: "Розовый", gold: "Золотой" }[c]}</option>`).join("")}</select></label>`).join("")}
+      <fieldset class="full swatches"><legend>Цвет</legend>${Object.keys(COLORS).map(c => `<label class="csw" title="${COLOR_NAMES[c]}"><input type="radio" name="c-${k.id}" value="${c}" ${k.color === c || (!k.color && c === "violet") ? "checked" : ""} aria-label="${COLOR_NAMES[c]}"><span style="background:${COLORS[c]}"></span></label>`).join("")}
+        <label class="csw csw-own" title="Свой цвет"><input type="radio" name="c-${k.id}" value="${HEX_RE.test(k.color || "") ? k.color : "#8B5CF6"}" ${HEX_RE.test(k.color || "") ? "checked" : ""} aria-label="Свой цвет" data-own-radio><span style="background:${HEX_RE.test(k.color || "") ? k.color : "conic-gradient(#E5484D,#F97316,#F2B233,#22A55B,#0EA5E9,#5B5BD6,#EC4899,#E5484D)"}"></span><input type="color" class="csw-pick" value="${HEX_RE.test(k.color || "") ? k.color : "#8B5CF6"}" data-own-color aria-label="Выбрать свой цвет"></label></fieldset>`).join("")}
       <p class="hint full">«Детский» вид — для младших: дела дня выстроены путём, кнопки крупнее, меньше разделов. «По возрасту» — детский до 9 лет включительно. Дела, баллы и награды в обоих видах общие. Сам ребёнок вид не переключает.</p>
       <div class="full btnrow"><button class="btn go">Сохранить</button><button type="button" class="btn ghost" data-act="addKid">${ic("plus")} Добавить ребёнка</button></div></form></section>`;
   if (p === "points") { const wk = F.weekly(S.cfg); return head("Баллы") + `<section class="card"><form class="grid" data-form="set-points">
@@ -1659,6 +1663,7 @@ const stripEntry = e => { const { status, dec, value, doc, ...rest } = e; return
 setInterval(() => { if (viewingKid() && S.tab === "today" && !document.querySelector(".scrim")) rerender(); }, 60000);
 
 /* ====================== СОБЫТИЯ ====================== */
+document.addEventListener("input", e => { const p = e.target.closest?.("[data-own-color]"); if (!p) return; const lab = p.closest(".csw-own"), r = lab.querySelector("[data-own-radio]"); r.value = p.value; r.checked = true; lab.querySelector("span").style.background = p.value; });
 document.addEventListener("change", e => { const sel = e.target.closest?.("[data-sound-select]"); if (sel) { const id = sel.value; lsSet("fq-sound", id === "classic" ? null : id); beep("alert", id); const pb = sel.closest(".snd-pick")?.querySelector(".snd-play"); if (pb) pb.disabled = id === "none"; if (!document.querySelector(".scrim")) render(); return; } });
 document.addEventListener("change", e => { const c = e.target.closest?.("[data-instant]"); if (!c) return; c.checked ? S.instant.add(c.dataset.instant) : S.instant.delete(c.dataset.instant); c.blur(); });
 document.addEventListener("click", e => {
@@ -1788,7 +1793,7 @@ document.addEventListener("click", e => {
     if (pushOn()) { ask("Выключить уведомления на этом устройстве?", "Выключить", () => S.be.disablePush(S.user).then(() => { toast("Уведомления выключены"); if (document.querySelector(".scrim")) closeModal(); render(); }).catch(fail)); return; }
     S.be.enablePush(S.user).then(() => { toast("Уведомления включены"); beep("good"); if (document.querySelector(".scrim")) closeModal(); render(); }, err => toast(err.message || "Не удалось включить уведомления")); return; }
   if (act === "beep") return beep("alert");
-  if (act === "addKid") { const n = kidsList().length + 1; const k = { id: "k" + Date.now().toString(36), since: today(), name: "Ребёнок " + n, age: 10, color: ["violet", "teal", "rose", "gold"][n % 4] }; S.be.setFamily({ kids: [...kidsList(), k] }).then(() => toast("Ребёнок добавлен — укажите имя")).catch(fail); return; }
+  if (act === "addKid") { const n = kidsList().length + 1; const k = { id: "k" + Date.now().toString(36), since: today(), name: "Ребёнок " + n, age: 10, color: ["violet", "teal", "rose", "gold", "blue", "orange", "green", "pink"][n % 8] }; S.be.setFamily({ kids: [...kidsList(), k] }).then(() => toast("Ребёнок добавлен — укажите имя")).catch(fail); return; }
   if (act === "switchFamily" || act === "leaveFamily") {
     if (act === "leaveFamily" && S.fid && !S.be.demo) { S.be.leaveFamilyRef(S.user, S.fid).catch(() => {}); S.families = S.families.filter(x => x !== S.fid); }
     lsSet("fq-fid", null); S.fid = null; S.loaded = false; S.setPage = null; stopWatch(); boot2(true); return; }
@@ -1808,7 +1813,7 @@ document.addEventListener("submit", e => {
     S.be.putGift(kid + "_" + F.monthKey(), g).then(() => { toast(kind === "gift" ? `Подарок отправлен: +${g.pts}` : "Готово"); f.reset(); }).catch(fail); return;
   }
   if (kind === "kids") {
-    const kids = kidsList().map(k => ({ ...k, name: f["n-" + k.id].value.trim() || k.name, age: parseInt(f["a-" + k.id].value) || k.age, color: f["c-" + k.id].value, mode: ["kids", "normal"].includes(f["m-" + k.id]?.value) ? f["m-" + k.id].value : "auto" }));
+    const kids = kidsList().map(k => ({ ...k, name: f["n-" + k.id].value.trim() || k.name, age: parseInt(f["a-" + k.id].value) || k.age, color: (v => COLORS[v] || HEX_RE.test(v) ? v : k.color)(f["c-" + k.id]?.value || ""), mode: ["kids", "normal"].includes(f["m-" + k.id]?.value) ? f["m-" + k.id].value : "auto" }));
     S.be.setFamily({ kids }).then(() => toast("Сохранено")).catch(fail); return;
   }
   const saved = () => toast("Сохранено");

@@ -189,6 +189,7 @@
     "Все обязательные дела дня": "All required tasks of a day", "7 идеальных дней подряд": "7 perfect days in a row", "Первый обмен баллов на награду": "First points-for-reward exchange",
     "Первый вклад": "First deposit", "Вклад вернулся с процентами": "A deposit came back with interest", "Подарил баллы брату или сестре": "Gave points to a brother or sister",
     "500 баллов за всё время": "500 points all-time", "1000 баллов за всё время": "1000 points all-time", "1500 баллов за всё время": "1500 points all-time", "Достигнут 5-й уровень": "Reached level 5",
+    "Свой цвет": "Custom color", "Выбрать свой цвет": "Pick a custom color", "Индиго": "Indigo", "Синий": "Blue", "Голубой": "Sky", "Зелёный": "Green", "Салатовый": "Lime", "Оранжевый": "Orange", "Красный": "Red", "Малиновый": "Pink", "Коричневый": "Brown", "Серый": "Grey",
     "Тема оформления": "Appearance", "Тема": "Theme", "Тёмная": "Dark", "Светлая": "Light", "Как в системе": "System",
     "Ночь и золото — как раньше": "Night and gold — the classic look", "Светлый фон, удобно днём": "Light background, easy in daylight",
     "Меняется вместе с настройкой телефона": "Follows your phone's setting",
